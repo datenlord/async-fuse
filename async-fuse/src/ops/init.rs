@@ -1,9 +1,10 @@
-use crate::context::FuseContext;
+use super::Relation;
+
 use crate::decode::{Decode, DecodeError, Decoder};
 use crate::encode::{self, Encode};
 use crate::kernel;
 
-use std::io::{self, IoSlice};
+use std::io::IoSlice;
 
 #[derive(Debug)]
 pub struct OpInit<'b>(&'b kernel::fuse_init_in);
@@ -21,10 +22,6 @@ impl OpInit<'_> {
     pub fn flags(&self) -> u32 {
         // FIXME: use bitflags
         self.0.flags
-    }
-
-    pub async fn reply(&self, cx: FuseContext<'_>, reply: ReplyInit) -> io::Result<()> {
-        cx.reply(reply).await
     }
 }
 
@@ -67,4 +64,8 @@ impl Encode for ReplyInit {
         let bytes = encode::as_abi_bytes(&self.0);
         container.extend(Some(IoSlice::new(bytes)))
     }
+}
+
+impl Relation for OpInit<'_> {
+    type Reply = ReplyInit;
 }

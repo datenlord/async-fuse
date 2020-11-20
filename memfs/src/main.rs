@@ -1,4 +1,4 @@
-use memfs::MemFs;
+use memfs::{MemFs, Server};
 
 use std::env;
 use std::path::PathBuf;
@@ -45,8 +45,10 @@ async fn run(args: Args) -> Result<()> {
 
     debug!(target = %target.display());
 
-    let fs = MemFs::mount(target).initialize().await?;
-    fs.run().await?;
+    let fs = MemFs;
+    let server = Server::mount(target, fs).initialize().await?;
+
+    server.run().await?;
 
     Ok(())
 }

@@ -1,121 +1,136 @@
-use std::io;
+use crate::buffer_pool::BufferPool;
+
+use std::io::{self, Read, Write};
 use std::pin::Pin;
+use std::sync::atomic::{self, AtomicU8};
+use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::thread;
 
-use async_fuse::FuseConn;
-use async_fuse::FuseDesc;
+use async_fuse::{FuseDesc, FuseWrite};
 
-use async_io::Async;
+use aligned_bytes::AlignedBytes;
+use atomic_waker::AtomicWaker;
 use blocking::unblock;
-use futures::io::{AsyncRead, AsyncWrite};
+use crossbeam_queue::SegQueue;
+use futures::Stream;
 
-pub struct Connection {
-    fd: Async<FuseDesc>,
+#[derive(Debug, Clone)]
+pub struct ConnWriter {
+    fd: Arc<FuseDesc>,
 }
 
-impl Connection {
-    pub async fn open() -> io::Result<Self> {
-        let fd = unblock(|| FuseDesc::open().and_then(Async::new)).await?;
-        Ok(Self { fd })
+impl FuseWrite for ConnWriter {
+    fn poll_reply(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+        bufs: &[io::IoSlice<'_>],
+    ) -> Poll<io::Result<()>> {
+        // libc::writev is atomic, so we don't need to lock the fd.
+        // fuse fd is always writable.
+        let len: usize = bufs.iter().map(|s| s.len()).sum();
+        let nwrite = (&*self.fd).write_vectored(bufs)?;
+        assert_eq!(len, nwrite);
+        Poll::Ready(Ok(()))
     }
+}
 
-    pub async fn close(self) -> io::Result<()> {
-        unblock(move || self.fd.into_inner().and_then(|fd| fd.close())).await
+struct ReaderInner {
+    pool: BufferPool,
+    queue: SegQueue<io::Result<(AlignedBytes, usize)>>,
+    waker: AtomicWaker,
+    state: AtomicU8,
+    fd: Arc<FuseDesc>,
+}
+
+const INIT: u8 = 0;
+const RUNNING: u8 = 1;
+const CLOSED: u8 = 2;
+
+pub struct ConnReader(Arc<ReaderInner>);
+
+impl Stream for ConnReader {
+    type Item = io::Result<(AlignedBytes, usize)>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = &*self.0;
+
+        if let Some(item) = this.queue.pop() {
+            return Poll::Ready(Some(item));
+        }
+        match this.state.load(atomic::Ordering::Acquire) {
+            INIT => panic!("reader daemon is not running"),
+            RUNNING => this.waker.register(cx.waker()),
+            CLOSED => return Poll::Ready(None),
+            _ => unreachable!(),
+        }
+        if let Some(item) = this.queue.pop() {
+            return Poll::Ready(Some(item));
+        }
+        Poll::Pending
     }
+}
 
+impl Drop for ConnReader {
+    fn drop(&mut self) {
+        self.0.state.store(CLOSED, atomic::Ordering::Release);
+    }
+}
+
+impl ConnReader {
     pub fn get_fd(&self) -> &FuseDesc {
-        self.fd.get_ref()
+        &*self.0.fd
+    }
+
+    pub fn spawn_daemon(&mut self) -> thread::JoinHandle<()> {
+        struct Guard<'a>(&'a AtomicU8);
+
+        impl Drop for Guard<'_> {
+            fn drop(&mut self) {
+                self.0.store(CLOSED, atomic::Ordering::Release);
+            }
+        }
+
+        if self
+            .0
+            .state
+            .compare_and_swap(INIT, RUNNING, atomic::Ordering::SeqCst)
+            != INIT
+        {
+            panic!("reader daemon is already spawned")
+        }
+
+        let daemon = Arc::clone(&self.0);
+        thread::spawn(move || {
+            let _guard = Guard(&daemon.state);
+            loop {
+                let mut buf = daemon.pool.acquire();
+                match (&*daemon.fd).read(&mut buf) {
+                    Ok(nread) => daemon.queue.push(Ok((buf, nread))),
+                    Err(err) => daemon.queue.push(Err(err)),
+                }
+                daemon.waker.wake();
+
+                if daemon.state.load(atomic::Ordering::Acquire) == CLOSED {
+                    break;
+                }
+            }
+        })
     }
 }
 
-impl FuseConn for Connection {}
+pub async fn connect(pool: BufferPool) -> io::Result<(ConnReader, ConnWriter)> {
+    let fd = Arc::new(unblock(FuseDesc::open).await?);
 
-impl FuseConn for &'_ Connection {}
+    let writer = ConnWriter { fd };
 
-impl AsyncRead for Connection {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
-        AsyncRead::poll_read(Pin::new(&mut self.fd), cx, buf)
-    }
+    let reader = ConnReader(Arc::new(ReaderInner {
+        pool,
+        queue: SegQueue::new(),
+        waker: AtomicWaker::new(),
+        state: INIT.into(),
+        fd: Arc::clone(&writer.fd),
+    }));
 
-    fn poll_read_vectored(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        bufs: &mut [io::IoSliceMut<'_>],
-    ) -> Poll<io::Result<usize>> {
-        AsyncRead::poll_read_vectored(Pin::new(&mut self.fd), cx, bufs)
-    }
-}
-
-impl AsyncWrite for Connection {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        AsyncWrite::poll_write(Pin::new(&mut self.fd), cx, buf)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_flush(Pin::new(&mut self.fd), cx)
-    }
-
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_close(Pin::new(&mut self.fd), cx)
-    }
-
-    fn poll_write_vectored(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        bufs: &[io::IoSlice<'_>],
-    ) -> Poll<io::Result<usize>> {
-        AsyncWrite::poll_write_vectored(Pin::new(&mut self.fd), cx, bufs)
-    }
-}
-
-impl AsyncRead for &'_ Connection {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
-        AsyncRead::poll_read(Pin::new(&mut &self.fd), cx, buf)
-    }
-
-    fn poll_read_vectored(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        bufs: &mut [io::IoSliceMut<'_>],
-    ) -> Poll<io::Result<usize>> {
-        AsyncRead::poll_read_vectored(Pin::new(&mut &self.fd), cx, bufs)
-    }
-}
-
-impl AsyncWrite for &'_ Connection {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        AsyncWrite::poll_write(Pin::new(&mut &self.fd), cx, buf)
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_flush(Pin::new(&mut &self.fd), cx)
-    }
-
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_close(Pin::new(&mut &self.fd), cx)
-    }
-
-    fn poll_write_vectored(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        bufs: &[io::IoSlice<'_>],
-    ) -> Poll<io::Result<usize>> {
-        AsyncWrite::poll_write_vectored(Pin::new(&mut &self.fd), cx, bufs)
-    }
+    Ok((reader, writer))
 }

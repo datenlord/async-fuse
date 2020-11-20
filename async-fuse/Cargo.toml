@@ -9,7 +9,6 @@ edition = "2018"
 [dependencies]
 async-trait = "0.1.41"
 crossbeam-utils = "0.8.0"
-futures-io = "0.3.7"
 futures-util = { version = "0.3.7", features = ["io"] }
 libc = "0.2.80"
 memchr = "2.3.4"
