@@ -16,8 +16,7 @@ use async_fuse::Operation;
 use aligned_bytes::AlignedBytes;
 use async_std::task;
 use blocking::unblock;
-use futures::io::AsyncReadExt;
-use futures::{pin_mut, StreamExt};
+use futures::pin_mut;
 use tracing::{debug, error};
 
 const PAGE_SIZE: usize = 4096;
@@ -39,11 +38,9 @@ where
     }
 
     pub async fn initialize(self) -> io::Result<Server<F>> {
-        let buffer_pool = BufferPool::new(MAX_BACKGROUND, BUFFER_SIZE, PAGE_SIZE);
-
         let ((reader, writer), mount_point) = {
             debug!("connecting to /dev/fuse");
-            let conn = connect(buffer_pool).await?;
+            let conn = connect().await?;
 
             debug!("connected");
 
@@ -62,7 +59,7 @@ where
 
         debug!("initializing");
 
-        let (mut reader, buf, nread) = unblock(|| {
+        let (reader, buf, nread) = unblock(|| {
             let mut buf = AlignedBytes::new_zeroed(BUFFER_SIZE, PAGE_SIZE);
             let nread = reader.get_fd().read(&mut buf)?;
             <io::Result<_>>::Ok((reader, buf, nread))
@@ -98,7 +95,7 @@ where
             panic!("failed to initialize memfs: first request is not FUSE_INIT");
         }
 
-        reader.spawn_daemon();
+        let buffer_pool = BufferPool::new(MAX_BACKGROUND, BUFFER_SIZE, PAGE_SIZE);
 
         debug!("initialized");
 
@@ -106,6 +103,7 @@ where
             reader,
             writer,
             mount_point,
+            buffer_pool: Arc::new(buffer_pool),
             fs: Arc::new(self.fs),
         };
         Ok(server)
@@ -115,8 +113,9 @@ where
 pub struct Server<F> {
     writer: ConnWriter,
     reader: ConnReader,
-    mount_point: PathBuf,
+    buffer_pool: Arc<BufferPool>,
     fs: Arc<F>,
+    mount_point: PathBuf,
 }
 
 impl<F> Server<F>
@@ -132,7 +131,9 @@ where
             let result = async {
                 debug!("waiting for fuse request");
 
-                let (buf, nread) = self.reader.next().await.expect("reader daemon is dead")?;
+                let buf = self.buffer_pool.acquire();
+
+                let (buf, nread) = self.reader.read(buf).await?;
                 let cx_writer = self.writer.clone();
                 let fs = Arc::clone(&self.fs);
 
