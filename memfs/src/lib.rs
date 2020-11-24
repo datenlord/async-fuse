@@ -19,7 +19,7 @@ mod fs {
             op: Operation<'b>,
         ) -> io::Result<()> {
             let _ = op;
-            cx.reply_err(Errno::NOSYS).await?;
+            cx.reply_err(Errno::ENOSYS).await?;
             Ok(())
         }
     }
