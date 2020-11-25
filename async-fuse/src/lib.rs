@@ -1,14 +1,16 @@
 #![deny(clippy::all)]
 
-mod abi_marker;
+#[macro_use]
+mod internel_macros;
 
+mod abi_marker;
+mod c_bytes;
 mod context;
 mod decode;
 mod encode;
 mod errno;
 mod fd;
 mod fs;
-mod utils;
 mod write;
 
 pub use self::context::FuseContext;

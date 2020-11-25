@@ -2,10 +2,11 @@ use crate::decode::{DecodeError, Decoder};
 use crate::encode::{self, Encode};
 use crate::errno::Errno;
 use crate::kernel;
-use crate::ops::{self, FuseInHeader, Operation, Relation};
+use crate::ops::{FuseInHeader, IsReplyOf, Operation};
 use crate::write::FuseWrite;
 
 use std::convert::TryFrom;
+use std::fmt::{self, Debug};
 use std::io::{self, IoSlice};
 use std::mem;
 use std::pin::Pin;
@@ -16,6 +17,15 @@ use smallvec::SmallVec;
 pub struct FuseContext<'b> {
     writer: Pin<&'b mut (dyn FuseWrite + Send)>,
     header: FuseInHeader<'b>,
+}
+
+impl Debug for FuseContext<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FuseContext")
+            .field("writer", &"<Pin<&'b mut (dyn FuseWrite + Send)>>")
+            .field("header", &self.header)
+            .finish()
+    }
 }
 
 impl<'b> FuseContext<'b> {
@@ -31,11 +41,27 @@ impl<'b> FuseContext<'b> {
             let header = de.decode::<FuseInHeader>()?;
             let opcode = header.0.opcode;
 
+            assert_eq!(usize::try_from(header.0.len).unwrap(), buf.len());
+
             let op = match opcode {
-                FUSE_INIT => {
-                    let args = de.decode::<ops::OpInit>()?;
-                    Operation::Init(args)
-                }
+                FUSE_INIT => Operation::Init(de.decode()?),
+                FUSE_LOOKUP => Operation::Lookup(de.decode()?),
+                FUSE_FORGET => Operation::Forget(de.decode()?),
+                FUSE_GETATTR => Operation::GetAttr(de.decode()?),
+                FUSE_SETATTR => Operation::SetAttr(de.decode()?),
+                FUSE_READLINK => Operation::ReadLink(de.decode()?),
+                FUSE_SYMLINK => Operation::SymLink(de.decode()?),
+                FUSE_UNLINK => Operation::Unlink(de.decode()?),
+                FUSE_MKNOD => Operation::MkNod(de.decode()?),
+                FUSE_MKDIR => Operation::MkDir(de.decode()?),
+                FUSE_RMDIR => Operation::RmDir(de.decode()?),
+                FUSE_OPEN => Operation::Open(de.decode()?),
+                FUSE_READ => Operation::Read(de.decode()?),
+                FUSE_WRITE => Operation::Write(de.decode()?),
+                FUSE_STATFS => Operation::StatFs(de.decode()?),
+                FUSE_RELEASE => Operation::Release(de.decode()?),
+                FUSE_FSYNC => Operation::FSync(de.decode()?),
+
                 // TODO: add more operations
                 _ => {
                     tracing::error!(%opcode, "unimplemented operation");
@@ -50,10 +76,9 @@ impl<'b> FuseContext<'b> {
         &self.header
     }
 
-    pub async fn reply<T>(mut self, _: &T, reply: T::Reply) -> io::Result<()>
+    pub async fn reply<T, R>(mut self, _: &T, reply: R) -> io::Result<()>
     where
-        T: Relation,
-        T::Reply: Encode,
+        R: IsReplyOf<T> + Encode,
     {
         let header;
         let header_len = mem::size_of::<kernel::fuse_out_header>();
@@ -70,7 +95,7 @@ impl<'b> FuseContext<'b> {
 
         header = kernel::fuse_out_header {
             len: u32::try_from(total_len).unwrap(),
-            unique: self.header.0.unique,
+            unique: self.header.unique(),
             error: 0,
         };
         bufs[0] = IoSlice::new(encode::as_abi_bytes(&header));

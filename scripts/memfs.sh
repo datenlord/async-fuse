@@ -11,4 +11,4 @@ if [ ! -d "$MNT_POINT" ];then
 fi
 
 sleep 1
-RUST_LOG=trace ./target/debug/memfs $MNT_POINT
+RUST_LOG=debug ./target/debug/memfs $MNT_POINT

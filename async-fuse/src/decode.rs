@@ -1,9 +1,7 @@
 use crate::abi_marker::FuseAbiData;
-use crate::utils::ptr as ptr_utils;
+use crate::c_bytes::CBytes;
 
-use std::ffi::OsStr;
 use std::mem;
-use std::os::unix::ffi::OsStrExt;
 use std::slice;
 
 use memchr::memchr;
@@ -35,6 +33,10 @@ pub trait Decode<'b>: Sized {
     fn decode(de: &mut Decoder<'b>) -> Result<Self, DecodeError>;
 }
 
+fn to_address<T: ?Sized>(ptr: *const T) -> usize {
+    ptr as *const () as usize
+}
+
 impl<'b> Decoder<'b> {
     pub fn new(bytes: &'b [u8]) -> Self {
         Self { bytes }
@@ -63,7 +65,7 @@ impl<'b> Decoder<'b> {
             return Err(DecodeError::NotEnough);
         }
 
-        let addr = ptr_utils::to_address(self.bytes.as_ptr());
+        let addr = to_address(self.bytes);
         if addr.wrapping_rem(ty_align) != 0 {
             return Err(DecodeError::AlignMismatch);
         }
@@ -75,7 +77,6 @@ impl<'b> Decoder<'b> {
         }
     }
 
-    #[allow(dead_code)]
     pub(crate) fn fetch_slice<T: FuseAbiData + Sized>(
         &mut self,
         len: usize,
@@ -93,7 +94,7 @@ impl<'b> Decoder<'b> {
             return Err(DecodeError::NotEnough);
         }
 
-        let addr = ptr_utils::to_address(self.bytes.as_ptr());
+        let addr = to_address(self.bytes);
         if addr.wrapping_rem(ty_align) != 0 {
             return Err(DecodeError::AlignMismatch);
         }
@@ -105,16 +106,23 @@ impl<'b> Decoder<'b> {
         }
     }
 
-    /// without NUL
-    pub(crate) fn fetch_c_str_bytes(&mut self) -> Result<&'b [u8], DecodeError> {
+    pub fn fetch_all_bytes(&mut self) -> Result<&'b [u8], DecodeError> {
+        unsafe {
+            let bytes = self.bytes;
+            self.bytes = slice::from_raw_parts(self.bytes.as_ptr(), 0);
+            Ok(bytes)
+        }
+    }
+
+    pub(crate) fn fetch_c_bytes(&mut self) -> Result<CBytes<'b>, DecodeError> {
         let idx = memchr(b'0', self.bytes).ok_or(DecodeError::NotEnough)?;
         let len = idx.wrapping_add(1);
         assert!(len <= self.bytes.len());
 
         unsafe {
             let bytes = self.pop_bytes_unchecked(len);
-            let ret = bytes.get_unchecked(..idx);
-            Ok(ret)
+            let ret = bytes.get_unchecked(..len);
+            Ok(CBytes::new_unchecked(ret))
         }
     }
 
@@ -127,19 +135,6 @@ impl<'b> Decoder<'b> {
             return Err(DecodeError::TooMuchData);
         }
         Ok(ret)
-    }
-}
-
-impl Decode<'_> for () {
-    fn decode(_: &mut Decoder<'_>) -> Result<Self, DecodeError> {
-        Ok(())
-    }
-}
-
-impl<'b> Decode<'b> for &'b OsStr {
-    fn decode(de: &mut Decoder<'b>) -> Result<Self, DecodeError> {
-        let bytes = de.fetch_c_str_bytes()?;
-        Ok(OsStr::from_bytes(bytes))
     }
 }
 

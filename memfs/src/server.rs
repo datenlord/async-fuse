@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 use async_fuse::kernel;
 use async_fuse::ops;
-use async_fuse::Errno;
 use async_fuse::FileSystem;
 use async_fuse::FuseContext;
 use async_fuse::Operation;
@@ -133,14 +132,16 @@ where
 
                 let buf = self.buffer_pool.acquire();
 
-                let (buf, nread) = self.reader.read(buf).await?;
+                let (mut buf, nread) = self.reader.read(buf).await?;
+                buf.set_len(nread);
+
                 let cx_writer = self.writer.clone();
                 let fs = Arc::clone(&self.fs);
 
                 debug!("spawn task");
                 task::spawn(async move {
                     let (header, op) =
-                        FuseContext::parse(&buf[..nread]).expect("failed to parse fuse request");
+                        FuseContext::parse(buf.as_ref()).expect("failed to parse fuse request");
 
                     debug!(opcode = header.opcode(), "got request");
 

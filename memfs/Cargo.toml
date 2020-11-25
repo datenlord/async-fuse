@@ -12,7 +12,6 @@ path = "../async-fuse"
 [dependencies]
 aligned-bytes = "0.1.5"
 anyhow = "1.0.34"
-async-io = "1.2.0"
 async-std = "1.7.0"
 async-trait = "0.1.41"
 blocking = "1.0.2"
@@ -21,7 +20,6 @@ futures = "0.3.8"
 libc = "0.2.80"
 memchr = "2.3.4"
 structopt = "0.3.20"
-atomic-waker = "1.0.0"
 
 
 [dependencies.tracing]

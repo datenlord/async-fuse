@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct Errno(i32);
 
 impl Errno {

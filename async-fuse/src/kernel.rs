@@ -22,7 +22,7 @@ pub const FUSE_ROOT_ID: u32 = 1;
 userspace works under 64bit kernels */
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct fuse_attr {
     pub ino: u64,
     pub size: u64,
@@ -294,7 +294,7 @@ pub const FUSE_MIN_READ_BUFFER: u32 = 8192;
 pub const FUSE_COMPAT_ENTRY_OUT_SIZE: u32 = 120;
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct fuse_entry_out {
     pub nodeid: u64,      /* Inode ID */
     pub generation: u64,  /* Inode generation: nodeid:gen must be unique for the fs's lifetime */

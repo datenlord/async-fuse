@@ -1,19 +1,11 @@
-use crate::buffer_pool::BufferPool;
-
 use std::io::{self, Read, Write};
 use std::pin::Pin;
-use std::sync::atomic::{self, AtomicU8};
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use std::thread;
 
 use async_fuse::{FuseDesc, FuseWrite};
 
-use aligned_bytes::AlignedBytes;
-use atomic_waker::AtomicWaker;
 use blocking::unblock;
-use crossbeam_queue::SegQueue;
-use futures::Stream;
 
 #[derive(Debug, Clone)]
 pub struct ConnWriter {
