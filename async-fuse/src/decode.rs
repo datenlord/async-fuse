@@ -115,7 +115,7 @@ impl<'b> Decoder<'b> {
     }
 
     pub(crate) fn fetch_c_bytes(&mut self) -> Result<CBytes<'b>, DecodeError> {
-        let idx = memchr(b'0', self.bytes).ok_or(DecodeError::NotEnough)?;
+        let idx = memchr(0, self.bytes).ok_or(DecodeError::NotEnough)?;
         let len = idx.wrapping_add(1);
         assert!(len <= self.bytes.len());
 
