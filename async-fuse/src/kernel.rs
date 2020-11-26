@@ -336,7 +336,7 @@ pub struct fuse_getattr_in {
 pub const FUSE_COMPAT_ATTR_OUT_SIZE: u32 = 96;
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct fuse_attr_out {
     pub attr_valid: u64, /* Cache timeout for the attributes */
     pub attr_valid_nsec: u32,
@@ -420,7 +420,7 @@ pub struct fuse_create_in {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct fuse_open_out {
     pub fh: u64,
     pub open_flags: u32,
@@ -509,7 +509,7 @@ pub struct fuse_getxattr_in {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct fuse_getxattr_out {
     pub size: u32,
     pub padding: u32,
@@ -699,6 +699,17 @@ pub struct fuse_dirent {
     pub namelen: u32,
     pub r#type: u32,
     pub name: [c_char],
+}
+
+impl fuse_dirent {
+    pub const fn offset_of_name() -> usize {
+        use std::mem;
+
+        mem::size_of::<u64>() // ino
+            + mem::size_of::<u64>() // off
+            + mem::size_of::<u32>() // namelen
+            + mem::size_of::<u32>() // type
+    }
 }
 
 //  #define FUSE_NAME_OFFSET offsetof(struct fuse_dirent, name)

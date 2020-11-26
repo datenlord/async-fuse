@@ -1,7 +1,21 @@
+use std::ascii;
+use std::fmt::{self, Debug};
+
 use memchr::memchr;
 
-#[derive(Debug)]
 pub struct CBytes<'b>(&'b [u8]);
+
+impl Debug for CBytes<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "b\"")?;
+        for &b in self.0 {
+            for c in ascii::escape_default(b) {
+                write!(f, "{}", c as char)?;
+            }
+        }
+        write!(f, "\"")
+    }
+}
 
 impl<'b> CBytes<'b> {
     pub unsafe fn new_unchecked(bytes: &'b [u8]) -> Self {
@@ -15,9 +29,9 @@ impl<'b> CBytes<'b> {
     }
 }
 
-pub fn check_bytes(bytes: &[u8]) -> Result<&[u8], NulError> {
+pub fn check_bytes(bytes: &[u8]) -> Result<(), NulError> {
     match memchr(0, bytes) {
-        None => Ok(bytes),
+        None => Ok(()),
         Some(pos) => Err(NulError { pos }),
     }
 }

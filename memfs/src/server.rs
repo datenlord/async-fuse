@@ -81,7 +81,7 @@ where
             rep.major(kernel::FUSE_KERNEL_VERSION)
                 .minor(kernel::FUSE_KERNEL_MINOR_VERSION)
                 .max_readahead(op.max_readahead())
-                .flags(op.flags())
+                .flags(0)
                 .max_background(MAX_BACKGROUND as u16)
                 .congestion_threshold(10)
                 .max_write(MAX_WRITE_SIZE as u32)
@@ -131,7 +131,7 @@ where
                 debug!("waiting for fuse request");
 
                 let buf = self.buffer_pool.acquire();
-
+                let pool = Arc::clone(&self.buffer_pool);
                 let (mut buf, nread) = self.reader.read(buf).await?;
                 buf.set_len(nread);
 
@@ -143,7 +143,11 @@ where
                     let (header, op) =
                         FuseContext::parse(buf.as_ref()).expect("failed to parse fuse request");
 
-                    debug!(opcode = header.opcode(), "got request");
+                    debug!(
+                        opcode = header.opcode(),
+                        unique = header.unique(),
+                        "got request"
+                    );
 
                     pin_mut!(cx_writer);
 
@@ -154,6 +158,8 @@ where
                         // FIXME: how to handle the error
                         error!(%err);
                     }
+
+                    pool.release(buf);
                 });
                 <io::Result<_>>::Ok(())
             }

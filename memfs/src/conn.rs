@@ -12,6 +12,8 @@ pub struct ConnWriter {
     fd: Arc<FuseDesc>,
 }
 
+// FIXME: io-uring (?)
+
 impl FuseWrite for ConnWriter {
     fn poll_reply(
         self: Pin<&mut Self>,

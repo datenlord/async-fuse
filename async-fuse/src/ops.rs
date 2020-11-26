@@ -1,32 +1,42 @@
 use crate::c_bytes::{self, CBytes, NulError};
-use crate::decode::{Decode, DecodeError, Decoder};
 use crate::encode::{self, Encode};
 use crate::kernel::*;
+
+use std::borrow::Cow;
+use std::convert::TryFrom;
+use std::{mem, ptr, slice};
 
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Operation<'b> {
-    Init(OpInit<'b>),
-    Lookup(OpLookup<'b>),
+    Flush(OpFlush<'b>),
+    FSync(OpFSync<'b>),
     Forget(OpForget<'b>),
     GetAttr(OpGetAttr<'b>),
-    SetAttr(OpSetAttr<'b>),
+    GetXAttr(OpGetXAttr<'b>),
+    Init(OpInit<'b>),
+    Interrupt(OpInterrupt<'b>),
+    Lookup(OpLookup<'b>),
+    MkDir(OpMkDir<'b>),
+    MkNod(OpMkNod<'b>),
+    Open(OpOpen<'b>),
+    OpenDir(OpOpenDir<'b>),
+    Read(OpRead<'b>),
+    ReadDir(OpReadDir<'b>),
     ReadLink(OpReadLink<'b>),
+    Release(OpRelease<'b>),
+    ReleaseDir(OpReleaseDir<'b>),
+    RmDir(OpRmDir<'b>),
+    SetAttr(OpSetAttr<'b>),
+    StatFs(OpStatFs<'b>),
     SymLink(OpSymLink<'b>),
     Unlink(OpUnlink<'b>),
-    MkNod(OpMkNod<'b>),
-    MkDir(OpMkDir<'b>),
-    RmDir(OpRmDir<'b>),
-    Open(OpOpen<'b>),
-    Read(OpRead<'b>),
     Write(OpWrite<'b>),
-    StatFs(OpStatFs<'b>),
-    Release(OpRelease<'b>),
-    FSync(OpFSync<'b>),
 }
 
 pub trait IsReplyOf<T> {}
 
+#[derive(Debug, Default)]
 pub struct ReplyEmpty(());
 
 impl Encode for ReplyEmpty {
@@ -94,13 +104,63 @@ pub struct OpLookup<'b> {
     name: CBytes<'b>,
 }
 
+impl<'b> OpLookup<'b> {
+    pub fn name(&self) -> &'b [u8] {
+        self.name.as_bytes()
+    }
+}
+
 derive_Decode!(@c_bytes OpLookup<'b>, name);
 
 declare_relation!(OpLookup<'_> => ReplyEntry);
 
-pub struct FuseAttr<'b>(&'b fuse_attr);
+#[derive(Debug, Default)]
+pub struct Attr(fuse_attr);
 
+impl Attr {
+    setters!(
+        ino: u64,
+        size: u64,
+        blocks: u64,
+        mode: u32, // FIXME: use bitflags
+        nlink: u32,
+        uid: u32,
+        gid: u32,
+        rdev: u32,
+        blksize: u32,
+    );
+    fn atime(&mut self, time: Duration) -> &mut Self {
+        self.0.atime = time.as_secs();
+        self.0.atimensec = time.subsec_nanos();
+        self
+    }
+    fn mtime(&mut self, time: Duration) -> &mut Self {
+        self.0.mtime = time.as_secs();
+        self.0.mtimensec = time.subsec_nanos();
+        self
+    }
+    fn ctime(&mut self, time: Duration) -> &mut Self {
+        self.0.ctime = time.as_secs();
+        self.0.ctimensec = time.subsec_nanos();
+        self
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct ReplyAttr(fuse_attr_out);
+
+impl ReplyAttr {
+    pub fn attr_valid(&mut self, timeout: Duration) -> &mut Self {
+        self.0.attr_valid = timeout.as_secs();
+        self.0.attr_valid_nsec = timeout.subsec_nanos();
+        self
+    }
+
+    pub fn attr(&mut self, attr: Attr) -> &mut Self {
+        self.0.attr = attr.0;
+        self
+    }
+}
 
 #[derive(Debug)]
 pub struct OpGetAttr<'b>(&'b fuse_getattr_in);
@@ -108,7 +168,6 @@ pub struct OpGetAttr<'b>(&'b fuse_getattr_in);
 #[derive(Debug)]
 pub struct OpSetAttr<'b>(&'b fuse_setattr_in);
 
-derive_Decode!(FuseAttr<'b>);
 derive_Decode!(OpGetAttr<'b>);
 derive_Decode!(OpSetAttr<'b>);
 
@@ -118,7 +177,36 @@ declare_relation!(OpGetAttr<'_> => ReplyAttr);
 declare_relation!(OpSetAttr<'_> => ReplyAttr);
 
 #[derive(Debug, Default)]
-pub struct ReplyEntry(pub(crate) fuse_entry_out);
+pub struct Entry(fuse_entry_out);
+
+impl Entry {
+    setters!(nodeid: u64, generation: u64,);
+
+    pub fn attr(&mut self, attr: Attr) -> &mut Self {
+        self.0.attr = attr.0;
+        self
+    }
+
+    pub fn entry_valid(&mut self, timeout: Duration) -> &mut Self {
+        self.0.entry_valid = timeout.as_secs();
+        self.0.entry_valid_nsec = timeout.subsec_nanos();
+        self
+    }
+    pub fn attr_valid(&mut self, timeout: Duration) -> &mut Self {
+        self.0.attr_valid = timeout.as_secs();
+        self.0.attr_valid_nsec = timeout.subsec_nanos();
+        self
+    }
+}
+
+#[derive(Debug)]
+pub struct ReplyEntry(fuse_entry_out);
+
+impl ReplyEntry {
+    pub fn new(entry: Entry) -> Self {
+        Self(entry.0)
+    }
+}
 
 derive_Encode!(ReplyEntry);
 
@@ -128,6 +216,7 @@ pub struct OpForget<'b>(&'b fuse_forget_in);
 derive_Decode!(OpForget<'b>);
 
 use std::io::IoSlice;
+use std::time::Duration;
 
 #[derive(Debug)]
 pub struct OpReadLink<'b>(&'b ());
@@ -215,22 +304,53 @@ pub struct OpOpen<'b>(&'b fuse_open_in);
 
 derive_Decode!(OpOpen<'b>);
 
+impl OpOpen<'_> {
+    getters!(flags: u32,); // FIXME: use bitflags
+}
+
+#[derive(Debug, Default)]
 pub struct ReplyOpen(fuse_open_out);
 
 derive_Encode!(ReplyOpen);
 
 declare_relation!(OpOpen<'_> => ReplyOpen);
 
+impl ReplyOpen {
+    setters!(
+        fh: u64,
+        open_flags: u32, // FIXME: use bitflags
+    );
+}
+
 #[derive(Debug)]
 pub struct OpRead<'b>(&'b fuse_read_in);
 
 derive_Decode!(OpRead<'b>);
 
-pub struct ReplyData<'a>(&'a [u8]);
+impl OpRead<'_> {
+    getters!(
+        fh: u64,
+        offset: u64,
+        size: u32,
+        read_flags: u32,
+        lock_owner: u64,
+        flags: u32,
+    );
+}
+
+pub struct ReplyData<'a> {
+    buf: &'a [u8],
+    offset: usize,
+    max_write_size: usize,
+}
 
 impl<'a> ReplyData<'a> {
-    pub fn new(data: &'a [u8]) -> Self {
-        Self(data)
+    pub fn new(buf: &'a [u8], offset: usize, max_write_size: usize) -> Self {
+        Self {
+            buf,
+            offset,
+            max_write_size,
+        }
     }
 }
 
@@ -239,7 +359,12 @@ impl Encode for ReplyData<'_> {
     where
         C: Extend<IoSlice<'c>>,
     {
-        encode::add_bytes(container, self.0)
+        let start = self.offset.min(self.buf.len());
+        let end = self
+            .offset
+            .saturating_add(self.max_write_size)
+            .min(self.buf.len());
+        encode::add_bytes(container, &self.buf[start..end])
     }
 }
 
@@ -283,5 +408,212 @@ pub struct OpFSync<'b>(&'b fuse_fsync_in);
 derive_Decode!(OpFSync<'b>);
 
 declare_relation!(OpFSync<'_> => ReplyEmpty);
+
+#[derive(Debug)]
+pub struct OpReadDir<'b>(&'b fuse_read_in);
+
+derive_Decode!(OpReadDir<'b>);
+
+impl OpReadDir<'_> {
+    getters!(
+        fh: u64,
+        offset: u64,
+        size: u32,
+        read_flags: u32, // FIXME: use bitflags
+        lock_owner: u64,
+        flags: u32, // FIXME: use bitflags
+    );
+}
+
+#[derive(Debug, Default)]
+pub struct Directory<'a> {
+    buf: Cow<'a, [u8]>,
+}
+
+impl<'a> Directory<'a> {
+    pub fn by_ref(&self) -> Directory<'_> {
+        Directory {
+            buf: Cow::Borrowed(&*self.buf),
+        }
+    }
+
+    pub fn with_capacity(cap: usize) -> Self {
+        Self {
+            buf: Cow::Owned(Vec::with_capacity(cap)),
+        }
+    }
+
+    // FIXME: dir_type should be an `enum` or a new type wrapper
+    pub fn add_entry(&mut self, ino: u64, dir_type: u32, name: &[u8]) -> Result<(), NulError> {
+        /// https://doc.rust-lang.org/std/alloc/struct.Layout.html#method.padding_needed_for
+        ///
+        /// https://doc.rust-lang.org/src/core/alloc/layout.rs.html#226-250
+        const fn round_up(len: usize, align: usize) -> usize {
+            len.wrapping_add(align).wrapping_sub(1) & !align.wrapping_sub(1)
+        }
+
+        c_bytes::check_bytes(name)?;
+
+        // FIXME: what is the proper length limit?
+        if name.len() > (libc::PATH_MAX - 1) as usize {
+            panic!("name is too long");
+        }
+
+        let entry_len = fuse_dirent::offset_of_name().wrapping_add(name.len());
+        let entry_len_padded = round_up(entry_len, mem::size_of::<u64>());
+        #[repr(C)]
+        struct DirEntry {
+            ino: u64,
+            off: u64,
+            namelen: u32,
+            r#type: u32,
+        }
+
+        let entry = DirEntry {
+            ino,
+            off: (self.buf.len() + entry_len_padded) as u64, // the offset of next entry
+            namelen: name.len() as u32,
+            r#type: dir_type,
+        };
+
+        let buf = self.buf.to_mut();
+        buf.reserve(entry_len_padded);
+
+        unsafe {
+            let base = &entry as *const DirEntry as *const u8;
+            let len = mem::size_of::<DirEntry>();
+            let bytes = slice::from_raw_parts(base, len);
+            buf.extend_from_slice(bytes);
+        }
+
+        buf.extend_from_slice(name);
+
+        unsafe {
+            let base = buf.as_mut_ptr().add(buf.len());
+            let pad_len = entry_len_padded - entry_len;
+            ptr::write_bytes(base, 0, pad_len);
+            let new_len = buf.len() + pad_len;
+            buf.set_len(new_len);
+        }
+
+        Ok(())
+    }
+}
+
+pub struct ReplyDirectory<'a> {
+    dir: Directory<'a>,
+    offset: usize,
+    max_write_size: usize,
+}
+
+declare_relation!(OpReadDir<'_> => ReplyDirectory<'_>);
+
+impl<'a> ReplyDirectory<'a> {
+    pub fn new(dir: Directory<'a>, offset: usize, max_write_size: usize) -> Self {
+        Self {
+            dir,
+            offset,
+            max_write_size,
+        }
+    }
+}
+
+impl Encode for ReplyDirectory<'_> {
+    fn collect_bytes<'c, C>(&'c self, container: &mut C)
+    where
+        C: Extend<IoSlice<'c>>,
+    {
+        let buf: &[u8] = &*self.dir.buf;
+        let start = self.offset.min(buf.len());
+        let end = self
+            .offset
+            .saturating_add(self.max_write_size)
+            .min(buf.len());
+        encode::add_bytes(container, &buf[start..end]);
+    }
+}
+
+#[derive(Debug)]
+pub struct OpOpenDir<'b>(&'b fuse_open_in);
+
+derive_Decode!(OpOpenDir<'b>);
+
+impl OpOpenDir<'_> {
+    getters!(flags: u32,); // FIXME: use bitflags
+}
+
+#[derive(Debug, Default)]
+pub struct ReplyOpenDir(fuse_open_out);
+
+derive_Encode!(ReplyOpenDir);
+
+declare_relation!(OpOpenDir<'_> => ReplyOpenDir);
+
+impl ReplyOpenDir {
+    setters!(
+        fh: u64,
+        open_flags: u32, // FIXME: use bitflags
+    );
+}
+
+#[derive(Debug)]
+pub struct OpReleaseDir<'b>(&'b fuse_release_in);
+
+derive_Decode!(OpReleaseDir<'b>);
+
+declare_relation!(OpReleaseDir<'_> => ReplyEmpty);
+
+#[derive(Debug)]
+pub struct OpFlush<'b>(&'b fuse_flush_in);
+
+derive_Decode!(OpFlush<'b>);
+
+declare_relation!(OpFlush<'_> => ReplyEmpty);
+
+#[derive(Debug)]
+pub struct OpInterrupt<'b>(&'b fuse_interrupt_in);
+
+derive_Decode!(OpInterrupt<'b>);
+
+declare_relation!(OpInterrupt<'_> => ReplyEmpty);
+
+#[derive(Debug)]
+pub struct OpGetXAttr<'b> {
+    arg: &'b fuse_getxattr_in,
+    name: CBytes<'b>,
+}
+
+derive_Decode!(@header OpGetXAttr<'b>, arg, name);
+
+pub struct ReplyGetXAttr<'a> {
+    out: fuse_getxattr_out,
+    buf: &'a [u8],
+}
+
+impl<'a> ReplyGetXAttr<'a> {
+    pub fn new(buf: &'a [u8]) -> Self {
+        if u32::try_from(buf.len()).is_err() {
+            panic!("buf is too large")
+        }
+
+        Self {
+            out: fuse_getxattr_out {
+                size: buf.len() as u32,
+                padding: Default::default(),
+            },
+            buf,
+        }
+    }
+}
+
+impl Encode for ReplyGetXAttr<'_> {
+    fn collect_bytes<'c, C>(&'c self, container: &mut C)
+    where
+        C: Extend<IoSlice<'c>>,
+    {
+        let bufs = [encode::as_abi_bytes(&self.out), self.buf];
+        container.extend(bufs.iter().map(|&b| IoSlice::new(b)));
+    }
+}
 
 // TODO: add more operations

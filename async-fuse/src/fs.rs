@@ -36,7 +36,7 @@ mod tests {
                     }
                     Operation::Read(read) => {
                         let bytes: &'b [u8] = b"asd";
-                        let reply = ReplyData::new(bytes);
+                        let reply = ReplyData::new(bytes, 0, 3);
                         cx.reply(&read, reply).await
                     }
                     _ => panic!("untested"),
