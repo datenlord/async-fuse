@@ -1,4 +1,4 @@
-use std::convert::TryInto;
+use std::convert::TryFrom;
 use std::os::raw::{c_char, c_int, c_void};
 use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::{io, mem};
@@ -62,6 +62,11 @@ impl FromRawFd for FuseDesc {
     }
 }
 
+#[allow(clippy::as_conversions, clippy::cast_sign_loss)]
+const fn force_cast(x: isize) -> usize {
+    x as usize
+}
+
 fn read(fd: &'_ FuseDesc, buf: &mut [u8]) -> io::Result<usize> {
     unsafe {
         let buf_ptr: *mut c_void = buf.as_mut_ptr().cast();
@@ -71,7 +76,7 @@ fn read(fd: &'_ FuseDesc, buf: &mut [u8]) -> io::Result<usize> {
         }
 
         // a non-negative `ssize_t` value can not overflow `usize`
-        Ok(ret as usize)
+        Ok(force_cast(ret))
     }
 }
 
@@ -80,10 +85,7 @@ fn read_vectored(fd: &'_ FuseDesc, bufs: &mut [io::IoSliceMut<'_>]) -> io::Resul
         // IoSliceMut is guaranteed to be ABI compatible with `iovec`
         let iov: *const libc::iovec = bufs.as_ptr().cast();
 
-        // returns EINVAL if bufs.len() overflows c_int
-        let iovcnt: c_int = bufs.len() as _;
-
-        debug_assert!(<usize as TryInto<c_int>>::try_into(bufs.len()).is_ok());
+        let iovcnt: c_int = c_int::try_from(bufs.len()).unwrap();
 
         let ret: isize = libc::readv(fd.fd, iov, iovcnt);
         if ret < 0 {
@@ -91,7 +93,7 @@ fn read_vectored(fd: &'_ FuseDesc, bufs: &mut [io::IoSliceMut<'_>]) -> io::Resul
         }
 
         // a non-negative `ssize_t` value can not overflow `usize`
-        Ok(ret as usize)
+        Ok(force_cast(ret))
     }
 }
 
@@ -124,7 +126,7 @@ fn write(fd: &'_ FuseDesc, buf: &[u8]) -> io::Result<usize> {
         }
 
         // a non-negative `ssize_t` value can not overflow `usize`
-        Ok(ret as usize)
+        Ok(force_cast(ret))
     }
 }
 
@@ -133,10 +135,7 @@ fn write_vectored(fd: &'_ FuseDesc, bufs: &[io::IoSlice<'_>]) -> io::Result<usiz
         // IoSlice is guaranteed to be ABI compatible with `iovec`
         let iov: *const libc::iovec = bufs.as_ptr().cast();
 
-        // returns EINVAL if bufs.len() overflows c_int
-        let iovcnt: c_int = bufs.len() as _;
-
-        debug_assert!(<usize as TryInto<c_int>>::try_into(bufs.len()).is_ok());
+        let iovcnt: c_int = c_int::try_from(bufs.len()).unwrap();
 
         let ret: isize = libc::writev(fd.fd, iov, iovcnt);
         if ret < 0 {
@@ -144,7 +143,8 @@ fn write_vectored(fd: &'_ FuseDesc, bufs: &[io::IoSlice<'_>]) -> io::Result<usiz
         }
 
         // a non-negative `ssize_t` value can not overflow `usize`
-        Ok(ret as usize)
+        #[allow(clippy::as_conversions)]
+        Ok(force_cast(ret))
     }
 }
 

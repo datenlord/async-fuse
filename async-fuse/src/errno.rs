@@ -2,7 +2,8 @@
 pub struct Errno(i32);
 
 impl Errno {
-    pub fn as_raw(&self) -> i32 {
+    #[must_use]
+    pub const fn as_raw(&self) -> i32 {
         self.0
     }
 }

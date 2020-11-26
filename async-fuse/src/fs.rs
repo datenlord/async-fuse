@@ -1,4 +1,4 @@
-use crate::context::FuseContext;
+use crate::ctx::FuseContext;
 use crate::ops::Operation;
 
 use std::io;
@@ -43,5 +43,7 @@ mod tests {
                 }
             }
         }
+
+        drop(MockFs);
     }
 }

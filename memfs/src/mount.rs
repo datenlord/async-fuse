@@ -8,6 +8,8 @@ use std::path::Path;
 
 use async_fuse::FuseDesc;
 
+use crate::c_str;
+
 fn stat(path: &CStr) -> io::Result<libc::stat> {
     unsafe {
         let mut stat: libc::stat = MaybeUninit::zeroed().assume_init();
@@ -22,23 +24,23 @@ fn stat(path: &CStr) -> io::Result<libc::stat> {
 
 macro_rules! ensure_type {
     ($lhs:expr, $rhs:ty) => {{
-        fn __check(_: $rhs) {}
+        const fn __check(_: $rhs) {}
         __check($lhs)
     }};
 }
 
 pub fn mount(fd: &FuseDesc, mount_point: &Path) -> io::Result<()> {
-    crate::c_str::with_c_str(mount_point.as_os_str().as_bytes(), |target| {
+    c_str::with(mount_point.as_os_str().as_bytes(), |target| {
         let stat = stat(target)?;
         let rootmode = stat.st_mode & libc::S_IFMT;
-        let uid = unsafe { libc::getuid() };
-        let gid = unsafe { libc::getgid() };
+        let user_id = unsafe { libc::getuid() };
+        let group_id = unsafe { libc::getgid() };
         let fd = fd.as_raw_fd();
 
         ensure_type!(fd, c_int);
         ensure_type!(rootmode, c_uint);
-        ensure_type!(uid, c_uint);
-        ensure_type!(gid, c_uint);
+        ensure_type!(user_id, c_uint);
+        ensure_type!(group_id, c_uint);
 
         let mut opts: [c_char; 128] = [0; 128];
         unsafe {
@@ -48,8 +50,8 @@ pub fn mount(fd: &FuseDesc, mount_point: &Path) -> io::Result<()> {
                 format.as_ptr().cast(),
                 fd,
                 rootmode,
-                uid,
-                gid,
+                user_id,
+                group_id,
             );
             assert!(ret > 0);
         }
@@ -76,7 +78,7 @@ pub fn mount(fd: &FuseDesc, mount_point: &Path) -> io::Result<()> {
 
 #[allow(dead_code)]
 pub fn umount(mount_point: &Path) -> io::Result<()> {
-    crate::c_str::with_c_str(mount_point.as_os_str().as_bytes(), |target| unsafe {
+    c_str::with(mount_point.as_os_str().as_bytes(), |target| unsafe {
         let ret = libc::umount2(target.as_ptr(), libc::MNT_FORCE);
         if ret < 0 {
             return Err(io::Error::last_os_error());

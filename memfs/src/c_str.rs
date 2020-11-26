@@ -4,16 +4,16 @@ use std::{io, ptr, slice};
 
 use memchr::memchr;
 
-pub fn with_c_str<T>(bytes: &[u8], f: impl FnOnce(&CStr) -> io::Result<T>) -> io::Result<T> {
-    if memchr(b'\0', bytes).is_some() {
+pub fn with<T>(bytes: &[u8], f: impl FnOnce(&CStr) -> io::Result<T>) -> io::Result<T> {
+    const STACK_BUF_SIZE: usize = libc::PATH_MAX as usize;
+
+    if memchr(0, bytes).is_some() {
         let err = io::Error::new(
             io::ErrorKind::InvalidInput,
             "input bytes contain an interior nul byte",
         );
         return Err(err);
     }
-
-    const STACK_BUF_SIZE: usize = 1024;
 
     if bytes.len() >= STACK_BUF_SIZE {
         let c_string = unsafe { CString::from_vec_unchecked(Vec::from(bytes)) };

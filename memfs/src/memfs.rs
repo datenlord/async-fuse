@@ -1,6 +1,7 @@
 use std::io;
 use std::time::Duration;
 
+#[allow(clippy::wildcard_imports)]
 use async_fuse::ops::*;
 use async_fuse::{Errno, FileSystem, FuseContext, Operation};
 
@@ -85,14 +86,17 @@ async fn do_readdir(cx: FuseContext<'_>, op: OpReadDir<'_>) -> io::Result<()> {
 
     let dir: &Directory = &*Lazy::new(|| {
         let mut dir = Directory::with_capacity(256);
-        dir.add_entry(1, libc::DT_DIR as u32, b".").unwrap();
-        dir.add_entry(1, libc::DT_DIR as u32, b"..").unwrap();
-        dir.add_entry(2, libc::DT_REG as u32, HELLO_NAME.as_bytes())
+        dir.add_entry(1, u32::from(libc::DT_DIR), b".").unwrap();
+        dir.add_entry(1, u32::from(libc::DT_DIR), b"..").unwrap();
+        dir.add_entry(2, u32::from(libc::DT_REG), HELLO_NAME.as_bytes())
             .unwrap();
         dir
     });
 
-    let reply = ReplyDirectory::new(dir.by_ref(), op.offset() as usize, op.size() as usize);
+    #[allow(clippy::cast_possible_truncation)]
+    let offset = op.offset() as usize;
+
+    let reply = ReplyDirectory::new(dir.by_ref(), offset, op.size() as usize);
     cx.reply(&op, reply).await
 }
 
@@ -104,6 +108,8 @@ async fn do_open(cx: FuseContext<'_>, op: OpOpen<'_>) -> io::Result<()> {
     }
 
     debug!(open_flags = ?op.flags());
+
+    #[allow(clippy::cast_possible_wrap)]
     if (op.flags() as i32) & libc::O_ACCMODE != libc::O_RDONLY {
         return cx.reply_err(Errno::EACCES).await;
     }
@@ -119,6 +125,7 @@ async fn do_opendir(cx: FuseContext<'_>, op: OpOpenDir<'_>) -> io::Result<()> {
         return cx.reply_err(Errno::ENOTDIR).await;
     }
 
+    #[allow(clippy::cast_possible_wrap)]
     if (op.flags() as i32) & libc::O_ACCMODE != libc::O_RDONLY {
         return cx.reply_err(Errno::EACCES).await;
     }
@@ -132,11 +139,10 @@ async fn do_read(cx: FuseContext<'_>, op: OpRead<'_>) -> io::Result<()> {
     let ino = cx.header().nodeid();
     assert_eq!(ino, 2);
 
-    let reply = ReplyData::new(
-        HELLO_STR.as_bytes(),
-        op.offset() as usize,
-        op.size() as usize,
-    );
+    #[allow(clippy::cast_possible_truncation)]
+    let offset = op.offset() as usize;
+
+    let reply = ReplyData::new(HELLO_STR.as_bytes(), offset, op.size() as usize);
     cx.reply(&op, reply).await
 }
 

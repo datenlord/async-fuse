@@ -1,5 +1,7 @@
 use crate::c_bytes::{self, CBytes, NulError};
 use crate::encode::{self, Encode};
+
+#[allow(clippy::wildcard_imports)]
 use crate::kernel::*;
 
 use std::borrow::Cow;
@@ -105,6 +107,7 @@ pub struct OpLookup<'b> {
 }
 
 impl<'b> OpLookup<'b> {
+    #[must_use]
     pub fn name(&self) -> &'b [u8] {
         self.name.as_bytes()
     }
@@ -203,7 +206,8 @@ impl Entry {
 pub struct ReplyEntry(fuse_entry_out);
 
 impl ReplyEntry {
-    pub fn new(entry: Entry) -> Self {
+    #[must_use]
+    pub const fn new(entry: Entry) -> Self {
         Self(entry.0)
     }
 }
@@ -345,7 +349,8 @@ pub struct ReplyData<'a> {
 }
 
 impl<'a> ReplyData<'a> {
-    pub fn new(buf: &'a [u8], offset: usize, max_write_size: usize) -> Self {
+    #[must_use]
+    pub const fn new(buf: &'a [u8], offset: usize, max_write_size: usize) -> Self {
         Self {
             buf,
             offset,
@@ -430,13 +435,15 @@ pub struct Directory<'a> {
     buf: Cow<'a, [u8]>,
 }
 
-impl<'a> Directory<'a> {
+impl Directory<'_> {
+    #[must_use]
     pub fn by_ref(&self) -> Directory<'_> {
         Directory {
             buf: Cow::Borrowed(&*self.buf),
         }
     }
 
+    #[must_use]
     pub fn with_capacity(cap: usize) -> Self {
         Self {
             buf: Cow::Owned(Vec::with_capacity(cap)),
@@ -444,23 +451,15 @@ impl<'a> Directory<'a> {
     }
 
     // FIXME: dir_type should be an `enum` or a new type wrapper
+    #[allow(clippy::as_conversions)]
     pub fn add_entry(&mut self, ino: u64, dir_type: u32, name: &[u8]) -> Result<(), NulError> {
-        /// https://doc.rust-lang.org/std/alloc/struct.Layout.html#method.padding_needed_for
+        /// <https://doc.rust-lang.org/std/alloc/struct.Layout.html#method.padding_needed_for>
         ///
-        /// https://doc.rust-lang.org/src/core/alloc/layout.rs.html#226-250
+        /// <https://doc.rust-lang.org/src/core/alloc/layout.rs.html#226-250>
         const fn round_up(len: usize, align: usize) -> usize {
             len.wrapping_add(align).wrapping_sub(1) & !align.wrapping_sub(1)
         }
 
-        c_bytes::check_bytes(name)?;
-
-        // FIXME: what is the proper length limit?
-        if name.len() > (libc::PATH_MAX - 1) as usize {
-            panic!("name is too long");
-        }
-
-        let entry_len = fuse_dirent::offset_of_name().wrapping_add(name.len());
-        let entry_len_padded = round_up(entry_len, mem::size_of::<u64>());
         #[repr(C)]
         struct DirEntry {
             ino: u64,
@@ -469,10 +468,22 @@ impl<'a> Directory<'a> {
             r#type: u32,
         }
 
+        c_bytes::check_bytes(name)?;
+
+        // FIXME: what is the proper length limit?
+        if name.len() > (libc::PATH_MAX - 1) as usize {
+            panic!("name is too long");
+        }
+        #[allow(clippy::cast_possible_truncation)]
+        let namelen = name.len() as u32;
+
+        let entry_len = fuse_dirent::offset_of_name().wrapping_add(name.len());
+        let entry_len_padded = round_up(entry_len, mem::size_of::<u64>());
+
         let entry = DirEntry {
             ino,
             off: (self.buf.len() + entry_len_padded) as u64, // the offset of next entry
-            namelen: name.len() as u32,
+            namelen,
             r#type: dir_type,
         };
 
@@ -480,7 +491,7 @@ impl<'a> Directory<'a> {
         buf.reserve(entry_len_padded);
 
         unsafe {
-            let base = &entry as *const DirEntry as *const u8;
+            let base: *const u8 = <*const DirEntry>::cast(&entry);
             let len = mem::size_of::<DirEntry>();
             let bytes = slice::from_raw_parts(base, len);
             buf.extend_from_slice(bytes);
@@ -509,7 +520,8 @@ pub struct ReplyDirectory<'a> {
 declare_relation!(OpReadDir<'_> => ReplyDirectory<'_>);
 
 impl<'a> ReplyDirectory<'a> {
-    pub fn new(dir: Directory<'a>, offset: usize, max_write_size: usize) -> Self {
+    #[must_use]
+    pub const fn new(dir: Directory<'a>, offset: usize, max_write_size: usize) -> Self {
         Self {
             dir,
             offset,
@@ -591,14 +603,14 @@ pub struct ReplyGetXAttr<'a> {
 }
 
 impl<'a> ReplyGetXAttr<'a> {
+    #[must_use]
     pub fn new(buf: &'a [u8]) -> Self {
-        if u32::try_from(buf.len()).is_err() {
-            panic!("buf is too large")
-        }
+        let buf_len =
+            u32::try_from(buf.len()).unwrap_or_else(|e| panic!("buf is too large: {}", e));
 
         Self {
             out: fuse_getxattr_out {
-                size: buf.len() as u32,
+                size: buf_len,
                 padding: Default::default(),
             },
             buf,

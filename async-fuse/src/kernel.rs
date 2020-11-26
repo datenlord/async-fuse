@@ -7,6 +7,8 @@
 //! latest: <https://github.com/libfuse/libfuse/blob/master/include/fuse_kernel.h>
 //!
 
+#![allow(clippy::doc_markdown)]
+
 use std::os::raw::c_char;
 
 ///  Version number of this interface
@@ -22,7 +24,7 @@ pub const FUSE_ROOT_ID: u32 = 1;
 userspace works under 64bit kernels */
 
 #[repr(C)]
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone)]
 pub struct fuse_attr {
     pub ino: u64,
     pub size: u64,
@@ -43,7 +45,7 @@ pub struct fuse_attr {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct fuse_kstatfs {
     pub blocks: u64,
     pub bfree: u64,
@@ -294,7 +296,7 @@ pub const FUSE_MIN_READ_BUFFER: u32 = 8192;
 pub const FUSE_COMPAT_ENTRY_OUT_SIZE: u32 = 120;
 
 #[repr(C)]
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone)]
 pub struct fuse_entry_out {
     pub nodeid: u64,      /* Inode ID */
     pub generation: u64,  /* Inode generation: nodeid:gen must be unique for the fs's lifetime */
@@ -336,7 +338,7 @@ pub struct fuse_getattr_in {
 pub const FUSE_COMPAT_ATTR_OUT_SIZE: u32 = 96;
 
 #[repr(C)]
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone)]
 pub struct fuse_attr_out {
     pub attr_valid: u64, /* Cache timeout for the attributes */
     pub attr_valid_nsec: u32,
@@ -481,7 +483,7 @@ pub struct fuse_write_out {
 pub const FUSE_COMPAT_STATFS_SIZE: u32 = 48;
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct fuse_statfs_out {
     pub st: fuse_kstatfs,
 }
@@ -702,6 +704,7 @@ pub struct fuse_dirent {
 }
 
 impl fuse_dirent {
+    #[must_use]
     pub const fn offset_of_name() -> usize {
         use std::mem;
 

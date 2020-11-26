@@ -1,9 +1,9 @@
-use crate::decode::{DecodeError, Decoder};
+use crate::de::{DecodeError, Decoder};
 use crate::encode::{self, Encode};
 use crate::errno::Errno;
+use crate::io::FuseWrite;
 use crate::kernel;
 use crate::ops::{FuseInHeader, IsReplyOf, Operation};
-use crate::write::FuseWrite;
 
 use std::convert::TryFrom;
 use std::fmt::{self, Debug};
@@ -29,11 +29,13 @@ impl Debug for FuseContext<'_> {
 }
 
 impl<'b> FuseContext<'b> {
+    #[must_use]
     pub fn new(writer: Pin<&'b mut (dyn FuseWrite + Send)>, header: FuseInHeader<'b>) -> Self {
         Self { writer, header }
     }
 
     pub fn parse(buf: &'b [u8]) -> Result<(FuseInHeader<'b>, Operation<'b>), DecodeError> {
+        #[allow(clippy::wildcard_imports)]
         use kernel::fuse_opcode::*;
 
         let mut de = Decoder::new(buf);
@@ -77,10 +79,12 @@ impl<'b> FuseContext<'b> {
         })
     }
 
-    pub fn header(&self) -> &FuseInHeader<'_> {
+    #[must_use]
+    pub const fn header(&self) -> &FuseInHeader<'_> {
         &self.header
     }
 
+    #[allow(clippy::future_not_send)]
     pub async fn reply<T, R>(mut self, _: &T, reply: R) -> io::Result<()>
     where
         R: IsReplyOf<T> + Encode,

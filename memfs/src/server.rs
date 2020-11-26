@@ -1,5 +1,5 @@
 use crate::buffer_pool::BufferPool;
-use crate::conn::{connect, ConnReader, ConnWriter};
+use crate::io::{connect, ConnReader, ConnWriter};
 use crate::mount::mount;
 
 use std::io::{self, Read};
@@ -19,10 +19,11 @@ use futures::pin_mut;
 use tracing::{debug, error};
 
 const PAGE_SIZE: usize = 4096;
-const MAX_WRITE_SIZE: usize = 128 * 1024;
-const MAX_BACKGROUND: usize = 10;
-const BUFFER_SIZE: usize = MAX_WRITE_SIZE + 512;
+const MAX_WRITE_SIZE: u32 = 128 * 1024;
+const MAX_BACKGROUND: u16 = 10;
+const BUFFER_SIZE: usize = (MAX_WRITE_SIZE + 512) as usize;
 
+#[allow(clippy::module_name_repetitions)]
 pub struct ServerBuilder<F> {
     mount_point: PathBuf,
     fs: F,
@@ -65,12 +66,13 @@ where
         })
         .await?;
 
-        let (header, op) = FuseContext::parse(&buf[..nread]).expect("failed to parse fuse request");
+        let (fuse_in_header, op) =
+            FuseContext::parse(&buf[..nread]).expect("failed to parse fuse request");
 
         let cx_writer = writer.clone();
         pin_mut!(cx_writer);
 
-        let cx = FuseContext::new(cx_writer, header);
+        let cx = FuseContext::new(cx_writer, fuse_in_header);
 
         debug!(opcode = cx.header().opcode(), "got first request");
 
@@ -82,9 +84,9 @@ where
                 .minor(kernel::FUSE_KERNEL_MINOR_VERSION)
                 .max_readahead(op.max_readahead())
                 .flags(0)
-                .max_background(MAX_BACKGROUND as u16)
+                .max_background(MAX_BACKGROUND)
                 .congestion_threshold(10)
-                .max_write(MAX_WRITE_SIZE as u32)
+                .max_write(MAX_WRITE_SIZE)
                 .time_gran(1)
                 .max_pages(0);
 
@@ -94,7 +96,7 @@ where
             panic!("failed to initialize memfs: first request is not FUSE_INIT");
         }
 
-        let buffer_pool = BufferPool::new(MAX_BACKGROUND, BUFFER_SIZE, PAGE_SIZE);
+        let buffer_pool = BufferPool::new(MAX_BACKGROUND as usize, BUFFER_SIZE, PAGE_SIZE);
 
         debug!("initialized");
 
@@ -109,6 +111,7 @@ where
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub struct Server<F> {
     writer: ConnWriter,
     reader: ConnReader,

@@ -10,7 +10,7 @@ impl Debug for CBytes<'_> {
         write!(f, "b\"")?;
         for &b in self.0 {
             for c in ascii::escape_default(b) {
-                write!(f, "{}", c as char)?;
+                write!(f, "{}", char::from(c))?;
             }
         }
         write!(f, "\"")
@@ -18,7 +18,7 @@ impl Debug for CBytes<'_> {
 }
 
 impl<'b> CBytes<'b> {
-    pub unsafe fn new_unchecked(bytes: &'b [u8]) -> Self {
+    pub const unsafe fn new_unchecked(bytes: &'b [u8]) -> Self {
         Self(bytes)
     }
 
@@ -43,7 +43,7 @@ pub struct NulError {
 }
 
 impl NulError {
-    pub fn nul_position(&self) -> usize {
+    pub const fn nul_position(&self) -> usize {
         self.pos
     }
 }
