@@ -1,5 +1,5 @@
 use std::io;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 #[allow(clippy::wildcard_imports)]
 use async_fuse::ops::*;
@@ -17,7 +17,19 @@ const HELLO_NAME: &str = "hello";
 async fn stat(ino: u64) -> Option<Attr> {
     let mut attr = Attr::default();
 
-    attr.ino(ino).blocks(8).blksize(4096).uid(0).gid(0);
+    let init_time: SystemTime = {
+        static INIT_TIME: Lazy<SystemTime> = Lazy::new(SystemTime::now);
+        *INIT_TIME
+    };
+
+    attr.ino(ino)
+        .blocks(8)
+        .blksize(4096)
+        .uid(0)
+        .gid(0)
+        .atime(init_time)
+        .ctime(init_time)
+        .mtime(init_time);
 
     match ino {
         1 => attr.mode(libc::S_IFDIR | 0o755).nlink(2).size(4096),
@@ -84,14 +96,18 @@ async fn do_readdir(cx: FuseContext<'_>, op: OpReadDir<'_>) -> io::Result<()> {
         return cx.reply_err(Errno::ENOTDIR).await;
     }
 
-    let dir: &Directory = &*Lazy::new(|| {
-        let mut dir = Directory::with_capacity(256);
-        dir.add_entry(1, u32::from(libc::DT_DIR), b".").unwrap();
-        dir.add_entry(1, u32::from(libc::DT_DIR), b"..").unwrap();
-        dir.add_entry(2, u32::from(libc::DT_REG), HELLO_NAME.as_bytes())
-            .unwrap();
-        dir
-    });
+    let dir: &Directory = {
+        static DIR: Lazy<Directory> = Lazy::new(|| {
+            let mut dir = Directory::with_capacity(256);
+            dir.add_entry(1, u32::from(libc::DT_DIR), b".").unwrap();
+            dir.add_entry(1, u32::from(libc::DT_DIR), b"..").unwrap();
+            dir.add_entry(2, u32::from(libc::DT_REG), HELLO_NAME.as_bytes())
+                .unwrap();
+            dir
+        });
+
+        &*DIR
+    };
 
     #[allow(clippy::cast_possible_truncation)]
     let offset = op.offset() as usize;

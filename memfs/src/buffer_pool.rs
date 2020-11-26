@@ -14,15 +14,15 @@ pub struct Buffer {
 }
 
 impl Buffer {
-    pub fn capacity(&self) -> usize {
-        self.inner.len()
-    }
+    // pub fn capacity(&self) -> usize {
+    //     self.inner.len()
+    // }
     pub fn set_len(&mut self, len: usize) {
         self.len = len;
     }
-    pub fn reset(&mut self) {
-        self.len = self.inner.len();
-    }
+    // pub fn reset(&mut self) {
+    //     self.len = self.inner.len();
+    // }
 }
 
 impl AsRef<[u8]> for Buffer {

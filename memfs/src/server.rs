@@ -38,7 +38,7 @@ where
     }
 
     pub async fn initialize(self) -> io::Result<Server<F>> {
-        let ((reader, writer), mount_point) = {
+        let ((reader, writer), _ /*mount_point*/) = {
             debug!("connecting to /dev/fuse");
             let conn = connect().await?;
 
@@ -103,7 +103,7 @@ where
         let server = Server {
             reader,
             writer,
-            mount_point,
+            // mount_point,
             buffer_pool: Arc::new(buffer_pool),
             fs: Arc::new(self.fs),
         };
@@ -117,7 +117,7 @@ pub struct Server<F> {
     reader: ConnReader,
     buffer_pool: Arc<BufferPool>,
     fs: Arc<F>,
-    mount_point: PathBuf,
+    // mount_point: PathBuf,
 }
 
 impl<F> Server<F>
@@ -184,6 +184,8 @@ where
                 }
             }
         }
+
+        debug!("shutdown");
 
         Ok(())
     }

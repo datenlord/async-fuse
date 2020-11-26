@@ -132,17 +132,23 @@ impl Attr {
         rdev: u32,
         blksize: u32,
     );
-    fn atime(&mut self, time: Duration) -> &mut Self {
+    pub fn atime(&mut self, time: SystemTime) -> &mut Self {
+        let time = time.duration_since(UNIX_EPOCH).unwrap_or_default();
+
         self.0.atime = time.as_secs();
         self.0.atimensec = time.subsec_nanos();
         self
     }
-    fn mtime(&mut self, time: Duration) -> &mut Self {
+    pub fn mtime(&mut self, time: SystemTime) -> &mut Self {
+        let time = time.duration_since(UNIX_EPOCH).unwrap_or_default();
+
         self.0.mtime = time.as_secs();
         self.0.mtimensec = time.subsec_nanos();
         self
     }
-    fn ctime(&mut self, time: Duration) -> &mut Self {
+    pub fn ctime(&mut self, time: SystemTime) -> &mut Self {
+        let time = time.duration_since(UNIX_EPOCH).unwrap_or_default();
+
         self.0.ctime = time.as_secs();
         self.0.ctimensec = time.subsec_nanos();
         self
@@ -220,7 +226,7 @@ pub struct OpForget<'b>(&'b fuse_forget_in);
 derive_Decode!(OpForget<'b>);
 
 use std::io::IoSlice;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
 pub struct OpReadLink<'b>(&'b ());
