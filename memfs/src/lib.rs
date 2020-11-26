@@ -9,6 +9,7 @@
     variant_size_differences,
 
     clippy::all,
+    clippy::restriction,
     clippy::pedantic,
     clippy::nursery,
     // clippy::cargo
@@ -18,7 +19,14 @@
     missing_debug_implementations,
     missing_docs,
     clippy::missing_docs_in_private_items,
-    clippy::missing_errors_doc
+    clippy::missing_errors_doc,
+    clippy::implicit_return,
+    clippy::blanket_clippy_restriction_lints,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::panic_in_result_fn,
+    clippy::wildcard_imports,
+    clippy::module_name_repetitions
 )]
 
 mod buffer_pool;
@@ -27,6 +35,7 @@ mod io;
 mod memfs;
 mod mount;
 mod server;
+mod utils;
 
 pub use self::memfs::MemFs;
 pub use self::server::{Server, ServerBuilder};

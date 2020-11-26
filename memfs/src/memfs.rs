@@ -1,12 +1,13 @@
 use std::io;
 use std::time::{Duration, SystemTime};
 
-#[allow(clippy::wildcard_imports)]
 use async_fuse::ops::*;
 use async_fuse::{Errno, FileSystem, FuseContext, Operation};
 
 use once_cell::sync::Lazy;
 use tracing::debug;
+
+use crate::utils::force_convert;
 
 #[derive(Debug)]
 pub struct MemFs; // hello_ll
@@ -37,7 +38,7 @@ async fn stat(ino: u64) -> Option<Attr> {
         2 => attr
             .mode(libc::S_IFREG | 0o444)
             .nlink(1)
-            .size(HELLO_STR.len() as u64),
+            .size(force_convert(HELLO_STR.len())),
 
         _ => return None,
     };
@@ -57,7 +58,7 @@ async fn lookup(parent: u64, name: &[u8]) -> Option<Entry> {
     let mut entry = Entry::default();
     entry.attr_valid(Duration::from_secs(1));
     entry.entry_valid(Duration::from_secs(1));
-    entry.attr(stat(2).await.unwrap());
+    entry.attr(stat(2).await?);
     entry.nodeid(2);
     debug!(?entry);
 
@@ -97,6 +98,7 @@ async fn do_readdir(cx: FuseContext<'_>, op: OpReadDir<'_>) -> io::Result<()> {
     }
 
     let dir: &Directory = {
+        #[allow(clippy::unwrap_used)]
         static DIR: Lazy<Directory> = Lazy::new(|| {
             let mut dir = Directory::with_capacity(256);
             dir.add_entry(1, u32::from(libc::DT_DIR), b".").unwrap();
@@ -109,10 +111,10 @@ async fn do_readdir(cx: FuseContext<'_>, op: OpReadDir<'_>) -> io::Result<()> {
         &*DIR
     };
 
-    #[allow(clippy::cast_possible_truncation)]
-    let offset = op.offset() as usize;
+    let offset = force_convert(op.offset());
+    let size = force_convert(op.size());
 
-    let reply = ReplyDirectory::new(dir.by_ref(), offset, op.size() as usize);
+    let reply = ReplyDirectory::new(dir.by_ref(), offset, size);
     cx.reply(&op, reply).await
 }
 
@@ -125,7 +127,7 @@ async fn do_open(cx: FuseContext<'_>, op: OpOpen<'_>) -> io::Result<()> {
 
     debug!(open_flags = ?op.flags());
 
-    #[allow(clippy::cast_possible_wrap)]
+    #[allow(clippy::cast_possible_wrap, clippy::as_conversions)]
     if (op.flags() as i32) & libc::O_ACCMODE != libc::O_RDONLY {
         return cx.reply_err(Errno::EACCES).await;
     }
@@ -141,7 +143,7 @@ async fn do_opendir(cx: FuseContext<'_>, op: OpOpenDir<'_>) -> io::Result<()> {
         return cx.reply_err(Errno::ENOTDIR).await;
     }
 
-    #[allow(clippy::cast_possible_wrap)]
+    #[allow(clippy::cast_possible_wrap, clippy::as_conversions)]
     if (op.flags() as i32) & libc::O_ACCMODE != libc::O_RDONLY {
         return cx.reply_err(Errno::EACCES).await;
     }
@@ -153,12 +155,14 @@ async fn do_opendir(cx: FuseContext<'_>, op: OpOpenDir<'_>) -> io::Result<()> {
 #[tracing::instrument]
 async fn do_read(cx: FuseContext<'_>, op: OpRead<'_>) -> io::Result<()> {
     let ino = cx.header().nodeid();
-    assert_eq!(ino, 2);
+    if ino != 2 {
+        return cx.reply_err(Errno::EISDIR).await;
+    }
 
-    #[allow(clippy::cast_possible_truncation)]
-    let offset = op.offset() as usize;
+    let offset = force_convert(op.offset());
+    let size = force_convert(op.size());
 
-    let reply = ReplyData::new(HELLO_STR.as_bytes(), offset, op.size() as usize);
+    let reply = ReplyData::new(HELLO_STR.as_bytes(), offset, size);
     cx.reply(&op, reply).await
 }
 
@@ -176,6 +180,7 @@ async fn do_interrupt(cx: FuseContext<'_>, op: OpInterrupt<'_>) -> io::Result<()
 
 #[async_trait::async_trait]
 impl FileSystem for MemFs {
+    #[inline]
     async fn dispatch<'b, 'a: 'b>(
         &'a self,
         cx: FuseContext<'b>,
@@ -183,6 +188,7 @@ impl FileSystem for MemFs {
     ) -> io::Result<()> {
         debug!(?op);
 
+        #[allow(clippy::wildcard_enum_match_arm)]
         match op {
             Operation::Lookup(op) => do_lookup(cx, op).await,
             Operation::GetAttr(op) => do_getattr(cx, op).await,

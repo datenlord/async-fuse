@@ -1,8 +1,7 @@
 use crate::c_bytes::{self, CBytes, NulError};
 use crate::encode::{self, Encode};
-
-#[allow(clippy::wildcard_imports)]
 use crate::kernel::*;
+use crate::utils::force_convert;
 
 use std::borrow::Cow;
 use std::convert::TryFrom;
@@ -108,6 +107,7 @@ pub struct OpLookup<'b> {
 
 impl<'b> OpLookup<'b> {
     #[must_use]
+    #[inline]
     pub fn name(&self) -> &'b [u8] {
         self.name.as_bytes()
     }
@@ -132,6 +132,8 @@ impl Attr {
         rdev: u32,
         blksize: u32,
     );
+
+    #[inline]
     pub fn atime(&mut self, time: SystemTime) -> &mut Self {
         let time = time.duration_since(UNIX_EPOCH).unwrap_or_default();
 
@@ -139,6 +141,8 @@ impl Attr {
         self.0.atimensec = time.subsec_nanos();
         self
     }
+
+    #[inline]
     pub fn mtime(&mut self, time: SystemTime) -> &mut Self {
         let time = time.duration_since(UNIX_EPOCH).unwrap_or_default();
 
@@ -146,6 +150,8 @@ impl Attr {
         self.0.mtimensec = time.subsec_nanos();
         self
     }
+
+    #[inline]
     pub fn ctime(&mut self, time: SystemTime) -> &mut Self {
         let time = time.duration_since(UNIX_EPOCH).unwrap_or_default();
 
@@ -159,12 +165,14 @@ impl Attr {
 pub struct ReplyAttr(fuse_attr_out);
 
 impl ReplyAttr {
+    #[inline]
     pub fn attr_valid(&mut self, timeout: Duration) -> &mut Self {
         self.0.attr_valid = timeout.as_secs();
         self.0.attr_valid_nsec = timeout.subsec_nanos();
         self
     }
 
+    #[inline]
     pub fn attr(&mut self, attr: Attr) -> &mut Self {
         self.0.attr = attr.0;
         self
@@ -191,16 +199,20 @@ pub struct Entry(fuse_entry_out);
 impl Entry {
     setters!(nodeid: u64, generation: u64,);
 
+    #[inline]
     pub fn attr(&mut self, attr: Attr) -> &mut Self {
         self.0.attr = attr.0;
         self
     }
 
+    #[inline]
     pub fn entry_valid(&mut self, timeout: Duration) -> &mut Self {
         self.0.entry_valid = timeout.as_secs();
         self.0.entry_valid_nsec = timeout.subsec_nanos();
         self
     }
+
+    #[inline]
     pub fn attr_valid(&mut self, timeout: Duration) -> &mut Self {
         self.0.attr_valid = timeout.as_secs();
         self.0.attr_valid_nsec = timeout.subsec_nanos();
@@ -213,6 +225,7 @@ pub struct ReplyEntry(fuse_entry_out);
 
 impl ReplyEntry {
     #[must_use]
+    #[inline]
     pub const fn new(entry: Entry) -> Self {
         Self(entry.0)
     }
@@ -236,6 +249,7 @@ derive_Decode!(@empty OpReadLink<'b>);
 pub struct ReplyReadLink<'a>(&'a [u8]); // bytes without NUL (?)
 
 impl<'a> ReplyReadLink<'a> {
+    #[inline]
     pub fn new(link_name: &'a [u8]) -> Result<Self, NulError> {
         c_bytes::check_bytes(link_name)?;
         Ok(Self(link_name))
@@ -356,6 +370,7 @@ pub struct ReplyData<'a> {
 
 impl<'a> ReplyData<'a> {
     #[must_use]
+    #[inline]
     pub const fn new(buf: &'a [u8], offset: usize, max_write_size: usize) -> Self {
         Self {
             buf,
@@ -443,6 +458,7 @@ pub struct Directory<'a> {
 
 impl Directory<'_> {
     #[must_use]
+    #[inline]
     pub fn by_ref(&self) -> Directory<'_> {
         Directory {
             buf: Cow::Borrowed(&*self.buf),
@@ -450,6 +466,7 @@ impl Directory<'_> {
     }
 
     #[must_use]
+    #[inline]
     pub fn with_capacity(cap: usize) -> Self {
         Self {
             buf: Cow::Owned(Vec::with_capacity(cap)),
@@ -457,7 +474,7 @@ impl Directory<'_> {
     }
 
     // FIXME: dir_type should be an `enum` or a new type wrapper
-    #[allow(clippy::as_conversions)]
+    #[inline]
     pub fn add_entry(&mut self, ino: u64, dir_type: u32, name: &[u8]) -> Result<(), NulError> {
         /// <https://doc.rust-lang.org/std/alloc/struct.Layout.html#method.padding_needed_for>
         ///
@@ -477,18 +494,19 @@ impl Directory<'_> {
         c_bytes::check_bytes(name)?;
 
         // FIXME: what is the proper length limit?
-        if name.len() > (libc::PATH_MAX - 1) as usize {
+
+        if name.len() > usize::try_from(libc::PATH_MAX.wrapping_sub(1)).unwrap() {
             panic!("name is too long");
         }
-        #[allow(clippy::cast_possible_truncation)]
-        let namelen = name.len() as u32;
+
+        let namelen = force_convert(name.len());
 
         let entry_len = fuse_dirent::offset_of_name().wrapping_add(name.len());
         let entry_len_padded = round_up(entry_len, mem::size_of::<u64>());
 
         let entry = DirEntry {
             ino,
-            off: (self.buf.len() + entry_len_padded) as u64, // the offset of next entry
+            off: force_convert(self.buf.len().wrapping_add(entry_len_padded)), // the offset of next entry
             namelen,
             r#type: dir_type,
         };
@@ -507,9 +525,9 @@ impl Directory<'_> {
 
         unsafe {
             let base = buf.as_mut_ptr().add(buf.len());
-            let pad_len = entry_len_padded - entry_len;
+            let pad_len = entry_len_padded.wrapping_sub(entry_len);
             ptr::write_bytes(base, 0, pad_len);
-            let new_len = buf.len() + pad_len;
+            let new_len = buf.len().wrapping_add(pad_len);
             buf.set_len(new_len);
         }
 
@@ -527,6 +545,7 @@ declare_relation!(OpReadDir<'_> => ReplyDirectory<'_>);
 
 impl<'a> ReplyDirectory<'a> {
     #[must_use]
+    #[inline]
     pub const fn new(dir: Directory<'a>, offset: usize, max_write_size: usize) -> Self {
         Self {
             dir,
@@ -547,7 +566,8 @@ impl Encode for ReplyDirectory<'_> {
             .offset
             .saturating_add(self.max_write_size)
             .min(buf.len());
-        encode::add_bytes(container, &buf[start..end]);
+        let bytes = &buf[start..end];
+        encode::add_bytes(container, bytes);
     }
 }
 
@@ -610,6 +630,7 @@ pub struct ReplyGetXAttr<'a> {
 
 impl<'a> ReplyGetXAttr<'a> {
     #[must_use]
+    #[inline]
     pub fn new(buf: &'a [u8]) -> Self {
         let buf_len =
             u32::try_from(buf.len()).unwrap_or_else(|e| panic!("buf is too large: {}", e));

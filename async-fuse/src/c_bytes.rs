@@ -24,8 +24,8 @@ impl<'b> CBytes<'b> {
 
     pub fn as_bytes(&self) -> &'b [u8] {
         debug_assert!(!self.0.is_empty());
-        debug_assert!(self.0[self.0.len() - 1] == 0);
-        unsafe { self.0.get_unchecked(..self.0.len() - 1) }
+        debug_assert!(self.0[self.0.len().wrapping_sub(1)] == 0);
+        unsafe { self.0.get_unchecked(..self.0.len().wrapping_sub(1)) }
     }
 }
 

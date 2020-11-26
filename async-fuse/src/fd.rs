@@ -12,6 +12,7 @@ unsafe impl Send for FuseDesc {}
 unsafe impl Sync for FuseDesc {}
 
 impl FuseDesc {
+    #[inline]
     pub fn open() -> io::Result<Self> {
         unsafe {
             let dev_path = b"/dev/fuse\0";
@@ -27,9 +28,13 @@ impl FuseDesc {
         }
     }
 
+    #[inline]
     pub fn close(self) -> io::Result<()> {
         let fd = self.fd;
+
+        #[allow(clippy::mem_forget)]
         mem::forget(self);
+
         unsafe {
             let ret: c_int = libc::close(fd);
             if ret < 0 {
@@ -42,6 +47,7 @@ impl FuseDesc {
 }
 
 impl Drop for FuseDesc {
+    #[inline]
     fn drop(&mut self) {
         unsafe {
             let ret = libc::close(self.fd);
@@ -51,12 +57,14 @@ impl Drop for FuseDesc {
 }
 
 impl AsRawFd for FuseDesc {
+    #[inline]
     fn as_raw_fd(&self) -> RawFd {
         self.fd
     }
 }
 
 impl FromRawFd for FuseDesc {
+    #[inline]
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
         Self { fd }
     }
@@ -98,20 +106,24 @@ fn read_vectored(fd: &'_ FuseDesc, bufs: &mut [io::IoSliceMut<'_>]) -> io::Resul
 }
 
 impl io::Read for &'_ FuseDesc {
+    #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         read(self, buf)
     }
 
+    #[inline]
     fn read_vectored(&mut self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
         read_vectored(self, bufs)
     }
 }
 
 impl io::Read for FuseDesc {
+    #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         read(self, buf)
     }
 
+    #[inline]
     fn read_vectored(&mut self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
         read_vectored(self, bufs)
     }
@@ -143,34 +155,39 @@ fn write_vectored(fd: &'_ FuseDesc, bufs: &[io::IoSlice<'_>]) -> io::Result<usiz
         }
 
         // a non-negative `ssize_t` value can not overflow `usize`
-        #[allow(clippy::as_conversions)]
         Ok(force_cast(ret))
     }
 }
 
 impl io::Write for &'_ FuseDesc {
+    #[inline]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         write(self, buf)
     }
 
+    #[inline]
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
 
+    #[inline]
     fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
         write_vectored(self, bufs)
     }
 }
 
 impl io::Write for FuseDesc {
+    #[inline]
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         write(self, buf)
     }
 
+    #[inline]
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
 
+    #[inline]
     fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
         write_vectored(self, bufs)
     }

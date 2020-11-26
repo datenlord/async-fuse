@@ -4,7 +4,6 @@ mod sealed {
 
 use self::sealed::Sealed;
 
-#[allow(clippy::wildcard_imports)]
 use crate::kernel::*;
 
 pub unsafe trait FuseAbiData: Sealed {}

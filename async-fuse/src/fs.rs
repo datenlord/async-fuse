@@ -28,6 +28,7 @@ mod tests {
                 cx: FuseContext<'b>,
                 op: Operation<'b>,
             ) -> io::Result<()> {
+                #[allow(clippy::wildcard_enum_match_arm)]
                 match op {
                     Operation::ReadLink(readlink) => {
                         let bytes: &'b [u8] = b"asd";

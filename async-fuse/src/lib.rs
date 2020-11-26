@@ -9,6 +9,7 @@
     variant_size_differences,
 
     clippy::all,
+    clippy::restriction,
     clippy::pedantic,
     clippy::nursery,
     // clippy::cargo
@@ -18,7 +19,15 @@
     missing_debug_implementations,
     missing_docs,
     clippy::missing_docs_in_private_items,
-    clippy::missing_errors_doc
+    clippy::missing_errors_doc,
+    clippy::blanket_clippy_restriction_lints,
+    clippy::implicit_return,
+    clippy::panic_in_result_fn,
+    clippy::unwrap_in_result,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::wildcard_imports
 )]
 
 #[macro_use]
@@ -36,6 +45,7 @@ mod ctx;
 mod errno;
 mod fs;
 mod io;
+mod utils;
 
 pub mod kernel;
 pub mod ops;

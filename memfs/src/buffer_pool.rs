@@ -66,7 +66,7 @@ impl BufferPool {
 
     pub fn release(&self, buf: Buffer) {
         if buf.inner.len() == self.buf_size && buf.inner.alignment() == self.align {
-            let _ = self.queue.push(buf.inner);
+            drop(self.queue.push(buf.inner));
         }
     }
 }

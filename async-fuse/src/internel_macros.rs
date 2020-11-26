@@ -80,6 +80,7 @@ macro_rules! declare_relation {
 macro_rules! getters {
     ($($f:ident: $t:ty,)+) => {$(
         #[must_use]
+        #[inline]
         pub const fn $f(&self) -> $t {
             self.0.$f
         }
@@ -88,6 +89,7 @@ macro_rules! getters {
 
 macro_rules! setters {
     ($($f:ident: $t:ty,)+) => {$(
+        #[inline]
         pub fn $f(&mut self, $f: $t) -> &mut Self {
             self.0.$f = $f;
             self

@@ -705,13 +705,14 @@ pub struct fuse_dirent {
 
 impl fuse_dirent {
     #[must_use]
+    #[inline]
     pub const fn offset_of_name() -> usize {
         use std::mem;
 
         mem::size_of::<u64>() // ino
-            + mem::size_of::<u64>() // off
-            + mem::size_of::<u32>() // namelen
-            + mem::size_of::<u32>() // type
+            .wrapping_add(mem::size_of::<u64>()) // off
+            .wrapping_add(mem::size_of::<u32>()) // namelen
+            .wrapping_add(mem::size_of::<u32>()) // type
     }
 }
 

@@ -76,13 +76,12 @@ pub fn mount(fd: &FuseDesc, mount_point: &Path) -> io::Result<()> {
     })
 }
 
-#[allow(dead_code)]
-pub fn umount(mount_point: &Path) -> io::Result<()> {
-    c_str::with(mount_point.as_os_str().as_bytes(), |target| unsafe {
-        let ret = libc::umount2(target.as_ptr(), libc::MNT_FORCE);
-        if ret < 0 {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(())
-    })
-}
+// pub fn umount(mount_point: &Path) -> io::Result<()> {
+//     c_str::with(mount_point.as_os_str().as_bytes(), |target| unsafe {
+//         let ret = libc::umount2(target.as_ptr(), libc::MNT_FORCE);
+//         if ret < 0 {
+//             return Err(io::Error::last_os_error());
+//         }
+//         Ok(())
+//     })
+// }

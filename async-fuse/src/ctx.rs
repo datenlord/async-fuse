@@ -20,6 +20,7 @@ pub struct FuseContext<'b> {
 }
 
 impl Debug for FuseContext<'_> {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("FuseContext")
             .field("writer", &"<Pin<&'b mut (dyn FuseWrite + Send)>>")
@@ -30,12 +31,13 @@ impl Debug for FuseContext<'_> {
 
 impl<'b> FuseContext<'b> {
     #[must_use]
+    #[inline]
     pub fn new(writer: Pin<&'b mut (dyn FuseWrite + Send)>, header: FuseInHeader<'b>) -> Self {
         Self { writer, header }
     }
 
+    #[inline]
     pub fn parse(buf: &'b [u8]) -> Result<(FuseInHeader<'b>, Operation<'b>), DecodeError> {
-        #[allow(clippy::wildcard_imports)]
         use kernel::fuse_opcode::*;
 
         let mut de = Decoder::new(buf);
@@ -80,11 +82,13 @@ impl<'b> FuseContext<'b> {
     }
 
     #[must_use]
+    #[inline]
     pub const fn header(&self) -> &FuseInHeader<'_> {
         &self.header
     }
 
     #[allow(clippy::future_not_send)]
+    #[inline]
     pub async fn reply<T, R>(mut self, _: &T, reply: R) -> io::Result<()>
     where
         R: IsReplyOf<T> + Encode,
@@ -114,6 +118,7 @@ impl<'b> FuseContext<'b> {
         Ok(())
     }
 
+    #[inline]
     pub async fn reply_err(mut self, errno: Errno) -> io::Result<()> {
         let header;
         let header_len = mem::size_of::<kernel::fuse_out_header>();

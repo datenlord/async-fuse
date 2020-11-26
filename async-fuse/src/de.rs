@@ -31,7 +31,7 @@ pub enum DecodeError {
 
 #[allow(single_use_lifetimes)]
 pub trait Decode<'b>: Sized {
-    fn decode(de: &mut Decoder<'b>) -> Result<Self, DecodeError>;
+    fn decode(de: &'_ mut Decoder<'b>) -> Result<Self, DecodeError>;
 }
 
 #[allow(clippy::as_conversions)]

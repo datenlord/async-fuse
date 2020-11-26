@@ -1,6 +1,7 @@
 use crate::buffer_pool::BufferPool;
 use crate::io::{connect, ConnReader, ConnWriter};
 use crate::mount::mount;
+use crate::utils::force_convert;
 
 use std::io::{self, Read};
 use std::path::PathBuf;
@@ -19,11 +20,10 @@ use futures::pin_mut;
 use tracing::{debug, error};
 
 const PAGE_SIZE: usize = 4096;
-const MAX_WRITE_SIZE: u32 = 128 * 1024;
 const MAX_BACKGROUND: u16 = 10;
-const BUFFER_SIZE: usize = (MAX_WRITE_SIZE + 512) as usize;
+const MAX_WRITE_SIZE: u32 = 128 * 1024;
+const BUFFER_SIZE: usize = 128 * 1024 + 512;
 
-#[allow(clippy::module_name_repetitions)]
 pub struct ServerBuilder<F> {
     mount_point: PathBuf,
     fs: F,
@@ -33,10 +33,12 @@ impl<F> ServerBuilder<F>
 where
     F: FileSystem + Send + 'static,
 {
+    #[inline]
     pub fn new(mount_point: PathBuf, fs: F) -> Self {
         Self { mount_point, fs }
     }
 
+    #[inline]
     pub async fn initialize(self) -> io::Result<Server<F>> {
         let ((reader, writer), _ /*mount_point*/) = {
             debug!("connecting to /dev/fuse");
@@ -66,8 +68,13 @@ where
         })
         .await?;
 
-        let (fuse_in_header, op) =
-            FuseContext::parse(&buf[..nread]).expect("failed to parse fuse request");
+        let (fuse_in_header, op) = match FuseContext::parse(&buf[..nread]) {
+            Ok(r) => r,
+            Err(e) => {
+                debug!(buf = ?buf.as_ref());
+                panic!("failed to parse fuse request: {}", e);
+            }
+        };
 
         let cx_writer = writer.clone();
         pin_mut!(cx_writer);
@@ -96,7 +103,7 @@ where
             panic!("failed to initialize memfs: first request is not FUSE_INIT");
         }
 
-        let buffer_pool = BufferPool::new(MAX_BACKGROUND as usize, BUFFER_SIZE, PAGE_SIZE);
+        let buffer_pool = BufferPool::new(force_convert(MAX_BACKGROUND), BUFFER_SIZE, PAGE_SIZE);
 
         debug!("initialized");
 
@@ -111,7 +118,6 @@ where
     }
 }
 
-#[allow(clippy::module_name_repetitions)]
 pub struct Server<F> {
     writer: ConnWriter,
     reader: ConnReader,
@@ -124,10 +130,12 @@ impl<F> Server<F>
 where
     F: FileSystem + Send + 'static,
 {
+    #[inline]
     pub fn mount(mount_point: PathBuf, fs: F) -> ServerBuilder<F> {
         ServerBuilder::new(mount_point, fs)
     }
 
+    #[inline]
     pub async fn run(mut self) -> io::Result<()> {
         loop {
             let result = async {
@@ -143,9 +151,13 @@ where
 
                 debug!("spawn task");
                 task::spawn(async move {
-                    let (header, op) =
-                        FuseContext::parse(buf.as_ref()).expect("failed to parse fuse request");
-
+                    let (header, op) = match FuseContext::parse(buf.as_ref()) {
+                        Ok(r) => r,
+                        Err(e) => {
+                            debug!(buf = ?buf.as_ref());
+                            panic!("failed to parse fuse request: {}", e);
+                        }
+                    };
                     debug!(
                         opcode = header.opcode(),
                         unique = header.unique(),

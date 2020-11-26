@@ -3,6 +3,7 @@ pub struct Errno(i32);
 
 impl Errno {
     #[must_use]
+    #[inline]
     pub const fn as_raw(&self) -> i32 {
         self.0
     }

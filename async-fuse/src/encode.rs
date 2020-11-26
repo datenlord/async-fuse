@@ -10,7 +10,6 @@ pub trait Encode {
         C: Extend<IoSlice<'c>>;
 }
 
-#[allow(clippy::as_conversions)]
 pub fn as_abi_bytes<T: FuseAbiData + Sized>(raw: &T) -> &[u8] {
     let ty_size = mem::size_of::<T>();
     let base: *const u8 = <*const T>::cast(raw);
