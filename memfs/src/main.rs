@@ -1,4 +1,5 @@
-use memfs::{MemFs, Server};
+use async_fuse::Server;
+use memfs::MemFs;
 
 use std::env;
 use std::path::PathBuf;

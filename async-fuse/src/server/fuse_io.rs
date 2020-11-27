@@ -1,9 +1,9 @@
+use crate::{FuseDesc, FuseWrite};
+
 use std::io::{self, Read, Write};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-
-use async_fuse::{FuseDesc, FuseWrite};
 
 use blocking::unblock;
 

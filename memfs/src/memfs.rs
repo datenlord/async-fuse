@@ -1,3 +1,5 @@
+use async_fuse::utils::ForceConvert;
+
 use std::io;
 use std::time::{Duration, SystemTime};
 
@@ -6,8 +8,6 @@ use async_fuse::{Errno, FileSystem, FuseContext, Operation};
 
 use once_cell::sync::Lazy;
 use tracing::debug;
-
-use crate::utils::force_convert;
 
 #[derive(Debug)]
 pub struct MemFs; // hello_ll
@@ -38,7 +38,7 @@ async fn stat(ino: u64) -> Option<Attr> {
         2 => attr
             .mode(libc::S_IFREG | 0o444)
             .nlink(1)
-            .size(force_convert(HELLO_STR.len())),
+            .size(HELLO_STR.len().force_convert()),
 
         _ => return None,
     };
@@ -111,8 +111,8 @@ async fn do_readdir(cx: FuseContext<'_>, op: OpReadDir<'_>) -> io::Result<()> {
         &*DIR
     };
 
-    let offset = force_convert(op.offset());
-    let size = force_convert(op.size());
+    let offset: usize = op.offset().force_convert();
+    let size: usize = op.size().force_convert();
 
     let reply = ReplyDirectory::new(dir.by_ref(), offset, size);
     cx.reply(&op, reply).await
@@ -159,8 +159,8 @@ async fn do_read(cx: FuseContext<'_>, op: OpRead<'_>) -> io::Result<()> {
         return cx.reply_err(Errno::EISDIR).await;
     }
 
-    let offset = force_convert(op.offset());
-    let size = force_convert(op.size());
+    let offset: usize = op.offset().force_convert();
+    let size: usize = op.size().force_convert();
 
     let reply = ReplyData::new(HELLO_STR.as_bytes(), offset, size);
     cx.reply(&op, reply).await

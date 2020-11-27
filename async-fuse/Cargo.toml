@@ -7,7 +7,11 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+aligned-bytes = "0.1.5"
+async-std = "1.7.0"
 async-trait = "0.1.41"
+blocking = "1.0.2"
+crossbeam-queue = "0.3.0"
 crossbeam-utils = "0.8.0"
 futures-util = { version = "0.3.7", features = ["io"] }
 libc = "0.2.80"

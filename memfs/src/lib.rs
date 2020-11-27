@@ -29,13 +29,6 @@
     clippy::module_name_repetitions
 )]
 
-mod buffer_pool;
-mod c_str;
-mod io;
 mod memfs;
-mod mount;
-mod server;
-mod utils;
 
 pub use self::memfs::MemFs;
-pub use self::server::{Server, ServerBuilder};

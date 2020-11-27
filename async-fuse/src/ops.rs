@@ -1,11 +1,11 @@
 use crate::c_bytes::{self, CBytes, NulError};
 use crate::encode::{self, Encode};
 use crate::kernel::*;
-use crate::utils::force_convert;
+use crate::utils::{as_bytes_unchecked, ForceConvert};
 
 use std::borrow::Cow;
 use std::convert::TryFrom;
-use std::{mem, ptr, slice};
+use std::mem;
 
 #[derive(Debug)]
 #[non_exhaustive]
@@ -498,15 +498,20 @@ impl Directory<'_> {
         if name.len() > usize::try_from(libc::PATH_MAX.wrapping_sub(1)).unwrap() {
             panic!("name is too long");
         }
-
-        let namelen = force_convert(name.len());
+        let namelen: u32 = name.len().force_convert();
 
         let entry_len = fuse_dirent::offset_of_name().wrapping_add(name.len());
         let entry_len_padded = round_up(entry_len, mem::size_of::<u64>());
 
+        let offset: u64 = self
+            .buf
+            .len()
+            .wrapping_add(entry_len_padded)
+            .force_convert();
+
         let entry = DirEntry {
             ino,
-            off: force_convert(self.buf.len().wrapping_add(entry_len_padded)), // the offset of next entry
+            off: offset, // the offset of next entry
             namelen,
             r#type: dir_type,
         };
@@ -515,18 +520,16 @@ impl Directory<'_> {
         buf.reserve(entry_len_padded);
 
         unsafe {
-            let base: *const u8 = <*const DirEntry>::cast(&entry);
-            let len = mem::size_of::<DirEntry>();
-            let bytes = slice::from_raw_parts(base, len);
+            let bytes = as_bytes_unchecked(&entry);
             buf.extend_from_slice(bytes);
         }
 
         buf.extend_from_slice(name);
 
         unsafe {
-            let base = buf.as_mut_ptr().add(buf.len());
+            let end_ptr = buf.as_mut_ptr().add(buf.len());
             let pad_len = entry_len_padded.wrapping_sub(entry_len);
-            ptr::write_bytes(base, 0, pad_len);
+            end_ptr.write_bytes(0, pad_len);
             let new_len = buf.len().wrapping_add(pad_len);
             buf.set_len(new_len);
         }

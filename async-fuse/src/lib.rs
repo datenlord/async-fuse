@@ -27,28 +27,29 @@
     clippy::unwrap_used,
     clippy::panic,
     clippy::indexing_slicing,
-    clippy::wildcard_imports
+    clippy::wildcard_imports,
+    clippy::module_name_repetitions
 )]
 
 #[macro_use]
 mod internel_macros;
 
-// unsafe modules
 mod abi_marker;
 mod c_bytes;
+mod c_str;
 mod de;
 mod encode;
 mod fd;
 
-// safe modules
 mod ctx;
 mod errno;
 mod fs;
 mod io;
-mod utils;
+mod server;
 
 pub mod kernel;
 pub mod ops;
+pub mod utils;
 
 pub use self::ctx::FuseContext;
 pub use self::errno::Errno;
@@ -56,3 +57,4 @@ pub use self::fd::FuseDesc;
 pub use self::fs::FileSystem;
 pub use self::io::FuseWrite;
 pub use self::ops::Operation;
+pub use self::server::Server;

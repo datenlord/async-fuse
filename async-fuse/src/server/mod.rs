@@ -1,22 +1,25 @@
-use crate::buffer_pool::BufferPool;
-use crate::io::{connect, ConnReader, ConnWriter};
-use crate::mount::mount;
-use crate::utils::force_convert;
+mod buffer_pool;
+mod fuse_io;
+mod mount;
+
+use self::buffer_pool::BufferPool;
+use self::fuse_io::{connect, ConnReader, ConnWriter};
+use self::mount::mount;
+
+use crate::kernel;
+use crate::ops;
+use crate::FileSystem;
+use crate::FuseContext;
+use crate::Operation;
 
 use std::io::{self, Read};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use async_fuse::kernel;
-use async_fuse::ops;
-use async_fuse::FileSystem;
-use async_fuse::FuseContext;
-use async_fuse::Operation;
-
 use aligned_bytes::AlignedBytes;
 use async_std::task;
 use blocking::unblock;
-use futures::pin_mut;
+use futures_util::pin_mut;
 use tracing::{debug, error};
 
 const PAGE_SIZE: usize = 4096;
@@ -103,7 +106,7 @@ where
             panic!("failed to initialize memfs: first request is not FUSE_INIT");
         }
 
-        let buffer_pool = BufferPool::new(force_convert(MAX_BACKGROUND), BUFFER_SIZE, PAGE_SIZE);
+        let buffer_pool = BufferPool::new(MAX_BACKGROUND.into(), BUFFER_SIZE, PAGE_SIZE);
 
         debug!("initialized");
 

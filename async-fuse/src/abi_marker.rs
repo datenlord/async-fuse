@@ -6,7 +6,7 @@ use self::sealed::Sealed;
 
 use crate::kernel::*;
 
-pub unsafe trait FuseAbiData: Sealed {}
+pub unsafe trait FuseAbiData: Sync + Sealed {}
 
 macro_rules! mark_abi_type {
     ($t: ident) => {
