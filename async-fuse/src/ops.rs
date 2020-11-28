@@ -1,11 +1,17 @@
-use crate::c_bytes::{self, CBytes, NulError};
+use crate::utils::better_as::extending_cast;
+use crate::utils::c_bytes::{self, CBytes, NulError};
 use crate::encode::{self, Encode};
+use crate::kernel::fopen_flags::*;
+use crate::kernel::fuse_init_flags::*;
 use crate::kernel::*;
+use crate::types::file::{FileType, StMode};
 use crate::utils::{as_bytes_unchecked, ForceConvert};
 
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::mem;
+
+use bitflags::bitflags;
 
 #[derive(Debug)]
 #[non_exhaustive]
@@ -78,12 +84,9 @@ derive_Encode!(ReplyInit);
 declare_relation!(OpInit<'_> => ReplyInit);
 
 impl OpInit<'_> {
-    getters!(
-        major: u32,
-        minor: u32,
-        max_readahead: u32,
-        flags: u32, // FIXME: use bitflags
-    );
+    getters!(major: u32, minor: u32, max_readahead: u32,);
+
+    flags_getter!(flags: FuseInitFlags);
 }
 
 impl ReplyInit {
@@ -91,13 +94,14 @@ impl ReplyInit {
         major: u32,
         minor: u32,
         max_readahead: u32,
-        flags: u32,
         max_background: u16,
         congestion_threshold: u16,
         max_write: u32,
         time_gran: u32,
         max_pages: u16,
     );
+
+    flags_setter!(flags: FuseInitFlags);
 }
 
 #[derive(Debug)]
@@ -125,13 +129,18 @@ impl Attr {
         ino: u64,
         size: u64,
         blocks: u64,
-        mode: u32, // FIXME: use bitflags
         nlink: u32,
         uid: u32,
         gid: u32,
         rdev: u32,
         blksize: u32,
     );
+
+    #[inline]
+    pub fn mode(&mut self, mode: StMode) -> &mut Self {
+        self.0.mode = mode.as_raw();
+        self
+    }
 
     #[inline]
     pub fn atime(&mut self, time: SystemTime) -> &mut Self {
@@ -473,9 +482,27 @@ impl Directory<'_> {
         }
     }
 
-    // FIXME: dir_type should be an `enum` or a new type wrapper
     #[inline]
-    pub fn add_entry(&mut self, ino: u64, dir_type: u32, name: &[u8]) -> Result<(), NulError> {
+    pub fn add_entry(&mut self, ino: u64, file_type: FileType, name: &[u8]) -> &mut Self {
+        let handle = |err| {
+            panic!(
+                "input bytes contain an interior nul byte: err = {}, name = {:?}",
+                err, name
+            )
+        };
+
+        self.try_add_entry(ino, file_type, name)
+            .unwrap_or_else(handle);
+        self
+    }
+
+    #[inline]
+    pub fn try_add_entry(
+        &mut self,
+        ino: u64,
+        file_type: FileType,
+        name: &[u8],
+    ) -> Result<(), NulError> {
         /// <https://doc.rust-lang.org/std/alloc/struct.Layout.html#method.padding_needed_for>
         ///
         /// <https://doc.rust-lang.org/src/core/alloc/layout.rs.html#226-250>
@@ -509,11 +536,13 @@ impl Directory<'_> {
             .wrapping_add(entry_len_padded)
             .force_convert();
 
+        let entry_type = extending_cast::u8_to_u32(file_type.as_raw());
+
         let entry = DirEntry {
             ino,
             off: offset, // the offset of next entry
             namelen,
-            r#type: dir_type,
+            r#type: entry_type,
         };
 
         let buf = self.buf.to_mut();
@@ -655,6 +684,47 @@ impl Encode for ReplyGetXAttr<'_> {
     {
         let bufs = [encode::as_abi_bytes(&self.out), self.buf];
         container.extend(bufs.iter().map(|&b| IoSlice::new(b)));
+    }
+}
+
+bitflags! {
+    pub struct FuseInitFlags: u32{
+        const ASYNC_READ            = FUSE_ASYNC_READ;
+        const POSIX_LOCKS           = FUSE_POSIX_LOCKS;
+        const FILE_OPS              = FUSE_FILE_OPS;
+        const ATOMIC_O_TRUNC        = FUSE_ATOMIC_O_TRUNC;
+        const EXPORT_SUPPORT        = FUSE_EXPORT_SUPPORT;
+        const BIG_WRITES            = FUSE_BIG_WRITES;
+        const DONT_MASK             = FUSE_DONT_MASK;
+        const SPLICE_WRITE          = FUSE_SPLICE_WRITE;
+        const SPLICE_MOVE           = FUSE_SPLICE_MOVE;
+        const SPLICE_READ           = FUSE_SPLICE_READ;
+        const FLOCK_LOCKS           = FUSE_FLOCK_LOCKS;
+        const HAS_IOCTL_DIR         = FUSE_HAS_IOCTL_DIR;
+        const AUTO_INVAL_DATA       = FUSE_AUTO_INVAL_DATA;
+        const DO_READDIRPLUS        = FUSE_DO_READDIRPLUS;
+        const READDIRPLUS_AUTO      = FUSE_READDIRPLUS_AUTO;
+        const ASYNC_DIO             = FUSE_ASYNC_DIO;
+        const WRITEBACK_CACHE       = FUSE_WRITEBACK_CACHE;
+        const NO_OPEN_SUPPORT       = FUSE_NO_OPEN_SUPPORT;
+        const PARALLEL_DIROPS       = FUSE_PARALLEL_DIROPS;
+        const HANDLE_KILLPRIV       = FUSE_HANDLE_KILLPRIV;
+        const POSIX_ACL             = FUSE_POSIX_ACL;
+        const ABORT_ERROR           = FUSE_ABORT_ERROR;
+        const MAX_PAGES             = FUSE_MAX_PAGES;
+        const CACHE_SYMLINKS        = FUSE_CACHE_SYMLINKS;
+        const NO_OPENDIR_SUPPORT    = FUSE_NO_OPENDIR_SUPPORT;
+        const EXPLICIT_INVAL_DATA   = FUSE_EXPLICIT_INVAL_DATA;
+    }
+}
+
+bitflags! {
+    pub struct FopenFlags: u32 {
+        const DIRECT_IO     = FOPEN_DIRECT_IO;
+        const KEEP_CACHE    = FOPEN_KEEP_CACHE;
+        const NONSEEKABLE   = FOPEN_NONSEEKABLE;
+        const CACHE_DIR     = FOPEN_CACHE_DIR;
+        const STREAM        = FOPEN_STREAM;
     }
 }
 

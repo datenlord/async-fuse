@@ -1,5 +1,6 @@
 use crate::abi_marker::FuseAbiData;
-use crate::c_bytes::CBytes;
+use crate::utils::c_bytes::CBytes;
+use crate::utils::to_address;
 
 use std::mem;
 use std::slice;
@@ -32,11 +33,6 @@ pub enum DecodeError {
 #[allow(single_use_lifetimes)]
 pub trait Decode<'b>: Sized {
     fn decode(de: &'_ mut Decoder<'b>) -> Result<Self, DecodeError>;
-}
-
-#[allow(clippy::as_conversions)]
-fn to_address<T: ?Sized>(ptr: *const T) -> usize {
-    ptr as *const () as usize
 }
 
 impl<'b> Decoder<'b> {

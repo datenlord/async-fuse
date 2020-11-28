@@ -1,12 +1,14 @@
+use crate::types::PATH_MAX;
+
 use std::ffi::{CStr, CString};
 use std::mem::MaybeUninit;
 use std::{io, ptr, slice};
 
 use memchr::memchr;
 
+#[inline]
 pub fn with<T>(bytes: &[u8], f: impl FnOnce(&CStr) -> io::Result<T>) -> io::Result<T> {
-    #[allow(clippy::as_conversions)]
-    const STACK_BUF_SIZE: usize = libc::PATH_MAX as usize;
+    const STACK_BUF_SIZE: usize = PATH_MAX;
 
     if memchr(0, bytes).is_some() {
         let err = io::Error::new(
@@ -32,18 +34,5 @@ pub fn with<T>(bytes: &[u8], f: impl FnOnce(&CStr) -> io::Result<T>) -> io::Resu
         let c_str = CStr::from_bytes_with_nul_unchecked(bytes_with_nul);
 
         f(c_str)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
-    use std::convert::TryFrom;
-
-    #[test]
-    #[allow(clippy::assertions_on_constants)]
-    fn path_max() {
-        assert!(usize::try_from(libc::PATH_MAX).is_ok());
-        assert!(libc::PATH_MAX >= 1024 && libc::PATH_MAX <= 8192);
     }
 }

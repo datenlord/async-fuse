@@ -1,16 +1,9 @@
-mod sealed {
-    pub trait Sealed {}
-}
-
-use self::sealed::Sealed;
-
 use crate::kernel::*;
 
-pub unsafe trait FuseAbiData: Sync + Sealed {}
+pub unsafe trait FuseAbiData: Sync {}
 
 macro_rules! mark_abi_type {
     ($t: ident) => {
-        impl Sealed for $t {}
         unsafe impl FuseAbiData for $t {}
     };
 }

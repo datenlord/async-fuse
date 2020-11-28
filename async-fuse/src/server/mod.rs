@@ -93,7 +93,7 @@ where
             rep.major(kernel::FUSE_KERNEL_VERSION)
                 .minor(kernel::FUSE_KERNEL_MINOR_VERSION)
                 .max_readahead(op.max_readahead())
-                .flags(0)
+                .flags(ops::FuseInitFlags::empty())
                 .max_background(MAX_BACKGROUND)
                 .congestion_threshold(10)
                 .max_write(MAX_WRITE_SIZE)

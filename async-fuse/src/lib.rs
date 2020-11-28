@@ -28,15 +28,14 @@
     clippy::panic,
     clippy::indexing_slicing,
     clippy::wildcard_imports,
-    clippy::module_name_repetitions
+    clippy::module_name_repetitions,
+    clippy::unreachable
 )]
 
 #[macro_use]
 mod internel_macros;
 
 mod abi_marker;
-mod c_bytes;
-mod c_str;
 mod de;
 mod encode;
 mod fd;
@@ -49,6 +48,7 @@ mod server;
 
 pub mod kernel;
 pub mod ops;
+pub mod types;
 pub mod utils;
 
 pub use self::ctx::FuseContext;

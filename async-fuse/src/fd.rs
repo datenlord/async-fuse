@@ -1,3 +1,5 @@
+use crate::utils::better_as::WrappingCast;
+
 use std::convert::TryFrom;
 use std::os::raw::{c_char, c_int, c_void};
 use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
@@ -70,11 +72,6 @@ impl FromRawFd for FuseDesc {
     }
 }
 
-#[allow(clippy::as_conversions, clippy::cast_sign_loss)]
-const fn force_cast(x: isize) -> usize {
-    x as usize
-}
-
 fn read(fd: &'_ FuseDesc, buf: &mut [u8]) -> io::Result<usize> {
     unsafe {
         let buf_ptr: *mut c_void = buf.as_mut_ptr().cast();
@@ -84,7 +81,7 @@ fn read(fd: &'_ FuseDesc, buf: &mut [u8]) -> io::Result<usize> {
         }
 
         // a non-negative `ssize_t` value can not overflow `usize`
-        Ok(force_cast(ret))
+        Ok(ret.wrapping_cast())
     }
 }
 
@@ -101,7 +98,7 @@ fn read_vectored(fd: &'_ FuseDesc, bufs: &mut [io::IoSliceMut<'_>]) -> io::Resul
         }
 
         // a non-negative `ssize_t` value can not overflow `usize`
-        Ok(force_cast(ret))
+        Ok(ret.wrapping_cast())
     }
 }
 
@@ -138,7 +135,7 @@ fn write(fd: &'_ FuseDesc, buf: &[u8]) -> io::Result<usize> {
         }
 
         // a non-negative `ssize_t` value can not overflow `usize`
-        Ok(force_cast(ret))
+        Ok(ret.wrapping_cast())
     }
 }
 
@@ -155,7 +152,7 @@ fn write_vectored(fd: &'_ FuseDesc, bufs: &[io::IoSlice<'_>]) -> io::Result<usiz
         }
 
         // a non-negative `ssize_t` value can not overflow `usize`
-        Ok(force_cast(ret))
+        Ok(ret.wrapping_cast())
     }
 }
 

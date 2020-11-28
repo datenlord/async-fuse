@@ -96,3 +96,23 @@ macro_rules! setters {
         }
     )+};
 }
+
+macro_rules! flags_getter {
+    ($f:ident: $t:ty) => {
+        #[must_use]
+        #[inline]
+        pub const fn $f(&self) -> $t {
+            <$t>::from_bits_truncate(self.0.flags)
+        }
+    };
+}
+
+macro_rules! flags_setter {
+    ($f:ident: $t:ty) => {
+        #[inline]
+        pub fn $f(&mut self, $f: $t) -> &mut Self {
+            self.0.$f = $f.bits();
+            self
+        }
+    };
+}

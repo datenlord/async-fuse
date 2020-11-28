@@ -6,8 +6,8 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 
-use crate::c_str;
-use crate::FuseDesc;
+use crate::utils::c_str;
+use crate::fd::FuseDesc;
 
 fn stat(path: &CStr) -> io::Result<libc::stat> {
     unsafe {

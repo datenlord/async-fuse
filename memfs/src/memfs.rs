@@ -4,6 +4,7 @@ use std::io;
 use std::time::{Duration, SystemTime};
 
 use async_fuse::ops::*;
+use async_fuse::types::file::{AccessMode, FileMode, FileType, StMode};
 use async_fuse::{Errno, FileSystem, FuseContext, Operation};
 
 use once_cell::sync::Lazy;
@@ -23,7 +24,8 @@ async fn stat(ino: u64) -> Option<Attr> {
         *INIT_TIME
     };
 
-    attr.ino(ino)
+    let _ = attr
+        .ino(ino)
         .blocks(8)
         .blksize(4096)
         .uid(0)
@@ -32,14 +34,20 @@ async fn stat(ino: u64) -> Option<Attr> {
         .ctime(init_time)
         .mtime(init_time);
 
-    match ino {
-        1 => attr.mode(libc::S_IFDIR | 0o755).nlink(2).size(4096),
+    let root_mode = StMode::new(
+        FileType::Directory,
+        FileMode::RWXU | FileMode::RGRP | FileMode::ROTH,
+    );
+    let file_mode = StMode::new(
+        FileType::Regular,
+        FileMode::RUSR | FileMode::RGRP | FileMode::ROTH,
+    );
 
-        2 => attr
-            .mode(libc::S_IFREG | 0o444)
-            .nlink(1)
-            .size(HELLO_STR.len().force_convert()),
+    let file_size: u64 = HELLO_STR.len().force_convert();
 
+    let _ = match ino {
+        1 => attr.mode(root_mode).nlink(2).size(4096),
+        2 => attr.mode(file_mode).nlink(1).size(file_size),
         _ => return None,
     };
 
@@ -56,10 +64,11 @@ async fn lookup(parent: u64, name: &[u8]) -> Option<Entry> {
         return None;
     }
     let mut entry = Entry::default();
-    entry.attr_valid(Duration::from_secs(1));
-    entry.entry_valid(Duration::from_secs(1));
-    entry.attr(stat(2).await?);
-    entry.nodeid(2);
+    let _ = entry
+        .attr_valid(Duration::from_secs(1))
+        .entry_valid(Duration::from_secs(1))
+        .attr(stat(2).await?)
+        .nodeid(2);
     debug!(?entry);
 
     return Some(entry);
@@ -72,7 +81,7 @@ async fn do_getattr(cx: FuseContext<'_>, op: OpGetAttr<'_>) -> io::Result<()> {
     match stat(ino).await {
         Some(attr) => {
             let mut reply = ReplyAttr::default();
-            reply.attr(attr);
+            let _ = reply.attr(attr);
             cx.reply(&op, reply).await
         }
         None => cx.reply_err(Errno::ENOENT).await,
@@ -97,14 +106,13 @@ async fn do_readdir(cx: FuseContext<'_>, op: OpReadDir<'_>) -> io::Result<()> {
         return cx.reply_err(Errno::ENOTDIR).await;
     }
 
-    let dir: &Directory = {
-        #[allow(clippy::unwrap_used)]
-        static DIR: Lazy<Directory> = Lazy::new(|| {
+    let dir: &Directory<'_> = {
+        static DIR: Lazy<Directory<'static>> = Lazy::new(|| {
             let mut dir = Directory::with_capacity(256);
-            dir.add_entry(1, u32::from(libc::DT_DIR), b".").unwrap();
-            dir.add_entry(1, u32::from(libc::DT_DIR), b"..").unwrap();
-            dir.add_entry(2, u32::from(libc::DT_REG), HELLO_NAME.as_bytes())
-                .unwrap();
+            let _ = dir
+                .add_entry(1, FileType::Directory, b".")
+                .add_entry(1, FileType::Directory, b"..")
+                .add_entry(2, FileType::Regular, HELLO_NAME.as_bytes());
             dir
         });
 
@@ -127,8 +135,8 @@ async fn do_open(cx: FuseContext<'_>, op: OpOpen<'_>) -> io::Result<()> {
 
     debug!(open_flags = ?op.flags());
 
-    #[allow(clippy::cast_possible_wrap, clippy::as_conversions)]
-    if (op.flags() as i32) & libc::O_ACCMODE != libc::O_RDONLY {
+    let access_mode = AccessMode::from_raw(op.flags());
+    if access_mode != AccessMode::ReadOnly {
         return cx.reply_err(Errno::EACCES).await;
     }
 
@@ -143,8 +151,8 @@ async fn do_opendir(cx: FuseContext<'_>, op: OpOpenDir<'_>) -> io::Result<()> {
         return cx.reply_err(Errno::ENOTDIR).await;
     }
 
-    #[allow(clippy::cast_possible_wrap, clippy::as_conversions)]
-    if (op.flags() as i32) & libc::O_ACCMODE != libc::O_RDONLY {
+    let access_mode = AccessMode::from_raw(op.flags());
+    if access_mode != AccessMode::ReadOnly {
         return cx.reply_err(Errno::EACCES).await;
     }
 
