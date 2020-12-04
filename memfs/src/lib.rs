@@ -28,7 +28,7 @@
     clippy::restriction,
     clippy::pedantic,
     clippy::nursery,
-    clippy::cargo
+    // clippy::cargo
 )]
 #![allow(
     // Some explicitly allowed Clippy lints, must have clear reason to allow

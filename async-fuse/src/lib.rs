@@ -28,7 +28,7 @@
     clippy::restriction,
     clippy::pedantic,
     clippy::nursery,
-    clippy::cargo
+    // clippy::cargo
 )]
 #![allow(
     // Some explicitly allowed Clippy lints, must have clear reason to allow
@@ -38,5 +38,12 @@
     clippy::panic, // allow debug_assert, panic in production code
 )]
 
-#[allow(dead_code)]
+#[allow(
+    dead_code,
+    missing_docs,
+    clippy::missing_docs_in_private_items,
+)]
 mod kernel;
+
+#[allow(dead_code)]
+mod abi_marker;
