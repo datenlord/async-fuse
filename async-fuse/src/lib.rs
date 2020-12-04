@@ -37,3 +37,6 @@
     clippy::module_name_repetitions, // repeation of module name in a struct name is not big deal
     clippy::panic, // allow debug_assert, panic in production code
 )]
+
+#[allow(dead_code)]
+mod kernel;
