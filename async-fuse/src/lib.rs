@@ -36,19 +36,18 @@
     clippy::implicit_return, // actually omitting the return keyword is idiomatic Rust code
     clippy::module_name_repetitions, // repeation of module name in a struct name is not big deal
     clippy::panic, // allow debug_assert, panic in production code
-    clippy::panic_in_result_fn // allow debug_assert, panic in production code
+    clippy::panic_in_result_fn, // allow debug_assert, panic in production code
+    clippy::indexing_slicing,
 )]
 
-#[allow(
-    dead_code,
-    missing_docs,
-    clippy::missing_docs_in_private_items,
-)]
+#[allow(dead_code, missing_docs, clippy::missing_docs_in_private_items)]
 mod kernel;
 
 #[allow(dead_code)]
 mod abi_marker;
 
 mod fd;
-
 pub use self::fd::FuseDesc;
+
+#[allow(dead_code)]
+mod utils;
