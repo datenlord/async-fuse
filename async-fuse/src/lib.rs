@@ -51,3 +51,6 @@ pub use self::fd::FuseDesc;
 
 #[allow(dead_code)]
 mod utils;
+
+mod write;
+pub use self::write::FuseWrite;
