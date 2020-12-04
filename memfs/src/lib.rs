@@ -1,4 +1,4 @@
-//! FUSE async implementation
+//! memfs
 
 #![deny(
     // The following are allowed by default lints according to
