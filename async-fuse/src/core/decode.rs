@@ -17,7 +17,7 @@ pub struct Decoder<'b> {
 }
 
 /// The error returned by [`Decoder`]
-#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum DecodeError {
     /// Expected more data
     #[error("NotEnough")]
@@ -44,21 +44,30 @@ pub enum DecodeError {
 #[allow(single_use_lifetimes)]
 pub trait Decode<'b>: Sized {
     /// Decode Self from bytes
+    /// # Errors
+    /// Returns [`DecodeError`]
     fn decode(de: &'_ mut Decoder<'b>) -> Result<Self, DecodeError>;
 }
 
 impl<'b> Decoder<'b> {
     /// Creates a [`Decoder`]
+    #[inline]
+    #[must_use]
     pub const fn new(bytes: &'b [u8]) -> Self {
         Self { bytes }
     }
 
     /// Returns true if the decoder has no data
+    #[inline]
+    #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.bytes.is_empty()
     }
 
     /// Decode T from bytes
+    /// # Errors
+    /// Returns [`DecodeError`]
+    #[inline]
     pub fn decode<T: Decode<'b>>(&mut self) -> Result<T, DecodeError> {
         <T as Decode>::decode(self)
     }
@@ -71,6 +80,9 @@ impl<'b> Decoder<'b> {
     }
 
     /// Fetches a reference to T
+    /// # Errors
+    /// Returns [`DecodeError`]
+    #[inline]
     pub fn fetch<T: FuseAbiData + Sized>(&mut self) -> Result<&'b T, DecodeError> {
         let ty_size: usize = mem::size_of::<T>();
         let ty_align: usize = mem::align_of::<T>();
@@ -93,6 +105,9 @@ impl<'b> Decoder<'b> {
     }
 
     /// Fetches a slice of T
+    /// # Errors
+    /// Returns [`DecodeError`]
+    #[inline]
     pub fn fetch_slice<T: FuseAbiData + Sized>(
         &mut self,
         len: usize,
@@ -123,6 +138,9 @@ impl<'b> Decoder<'b> {
     }
 
     /// Fetches all bytes
+    /// # Errors
+    /// Returns [`DecodeError`]
+    #[inline]
     pub fn fetch_all_bytes(&mut self) -> Result<&'b [u8], DecodeError> {
         unsafe {
             let bytes = self.bytes;
@@ -144,7 +162,9 @@ impl<'b> Decoder<'b> {
         }
     }
 
+    /// # Errors
     /// Returns `DecodeError::TooMuchData` if the data is not completely consumed
+    #[inline]
     pub fn all_consuming<T>(
         &mut self,
         f: impl FnOnce(&mut Self) -> Result<T, DecodeError>,

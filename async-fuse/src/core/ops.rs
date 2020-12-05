@@ -7,6 +7,7 @@ use super::kernel::fuse_in_header;
 pub trait IsReplyOf<T> {}
 
 /// FUSE operations
+#[derive(Debug)]
 #[non_exhaustive]
 pub enum Operation<'b> {
     /// TODO
@@ -16,6 +17,7 @@ pub enum Operation<'b> {
 macro_rules! derive_Decode {
     ($t:ty) => {
         impl<'b> Decode<'b> for $t {
+            #[inline]
             fn decode(de: &mut Decoder<'b>) -> Result<Self, DecodeError> {
                 Ok(Self(de.fetch()?))
             }

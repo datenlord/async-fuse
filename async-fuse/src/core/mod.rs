@@ -17,13 +17,15 @@ pub use self::errno::Errno;
 
 #[allow(dead_code)]
 mod decode;
-
+pub use self::decode::{Decode, DecodeError, Decoder};
 #[allow(dead_code)]
 mod encode;
 pub use self::encode::Encode;
 
-#[allow(dead_code)]
-mod ops;
+pub mod ops;
 
-#[allow(dead_code)]
 mod context;
+pub use self::context::FuseContext;
+
+mod fs;
+pub use self::fs::FileSystem;

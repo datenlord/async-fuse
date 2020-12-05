@@ -46,6 +46,8 @@ impl<'b> FuseContext<'b> {
     }
 
     /// Parses a buffer
+    /// # Errors
+    /// Returns [`DecodeError`]
     #[inline]
     pub fn parse(buf: &'b [u8]) -> Result<(FuseInHeader<'b>, Operation<'b>), DecodeError> {
         let mut de = Decoder::new(buf);
@@ -75,6 +77,8 @@ impl<'b> FuseContext<'b> {
     }
 
     /// Sends reply
+    /// # Errors
+    /// Returns [`io::Error`] when failed to write bytes to the connection
     #[allow(clippy::future_not_send)]
     #[inline]
     pub async fn reply<T, R>(mut self, _: &T, reply: R) -> io::Result<()>
@@ -123,6 +127,8 @@ impl<'b> FuseContext<'b> {
     }
 
     /// Sends errno
+    /// # Errors
+    /// Returns [`io::Error`] when failed to write bytes to the connection
     #[inline]
     pub async fn reply_err(mut self, errno: Errno) -> io::Result<()> {
         let header_len: usize = mem::size_of::<kernel::fuse_out_header>();
