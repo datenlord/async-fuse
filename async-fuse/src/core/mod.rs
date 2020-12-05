@@ -17,3 +17,7 @@ pub use self::errno::Errno;
 
 #[allow(dead_code)]
 mod decode;
+
+#[allow(dead_code)]
+mod encode;
+pub use self::encode::Encode;
