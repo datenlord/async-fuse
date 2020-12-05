@@ -21,3 +21,9 @@ mod decode;
 #[allow(dead_code)]
 mod encode;
 pub use self::encode::Encode;
+
+#[allow(dead_code)]
+mod ops;
+
+#[allow(dead_code)]
+mod context;
