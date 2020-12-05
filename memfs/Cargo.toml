@@ -7,3 +7,35 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+once_cell = "1.5.2"
+async-trait = "0.1.42"
+async-std = "1.7.0"
+structopt = "0.3.21"
+
+
+[dependencies.async-fuse]
+path = "../async-fuse"
+
+[dependencies.tracing]
+git = "https://github.com/tokio-rs/tracing"
+rev = "8070a85"
+version = "0.2.0"
+## FIXME: unpublished version
+
+[dependencies.tracing-error]
+git = "https://github.com/tokio-rs/tracing"
+rev = "8070a85"
+version = "0.2.0"
+## FIXME: unpublished version
+
+[dependencies.tracing-futures]
+git = "https://github.com/tokio-rs/tracing"
+rev = "8070a85"
+version = "0.3.0"
+## FIXME: unpublished version
+
+[dependencies.tracing-subscriber]
+git = "https://github.com/tokio-rs/tracing"
+rev = "8070a85"
+version = "0.3.0"
+## FIXME: unpublished version

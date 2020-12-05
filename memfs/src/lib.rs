@@ -5,7 +5,7 @@
     // https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html
     anonymous_parameters,
     bare_trait_objects,
-    box_pointers,
+    // box_pointers,
     elided_lifetimes_in_paths,
     missing_copy_implementations,
     missing_debug_implementations,
@@ -37,3 +37,5 @@
     clippy::module_name_repetitions, // repeation of module name in a struct name is not big deal
     clippy::panic, // allow debug_assert, panic in production code
 )]
+
+pub mod hello_ll;

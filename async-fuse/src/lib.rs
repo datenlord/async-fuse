@@ -43,8 +43,5 @@
 
 pub mod core;
 pub mod server;
-
 pub mod types;
-
-#[allow(dead_code)]
-mod utils;
+pub mod utils;
