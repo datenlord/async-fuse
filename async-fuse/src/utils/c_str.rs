@@ -7,6 +7,11 @@ use std::{io, ptr, slice};
 use memchr::memchr;
 
 /// Stores short bytes on stack, stores long bytes on heap and provides [`CStr`]
+/// 
+/// # Errors
+/// Returns [`io::Error`]
+/// 
+/// Generates `InvalidInput` if the input bytes contain an interior nul byte
 #[inline]
 pub fn with<T>(bytes: &[u8], f: impl FnOnce(&CStr) -> io::Result<T>) -> io::Result<T> {
     /// The threshold of allocation

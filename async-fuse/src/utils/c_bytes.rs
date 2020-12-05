@@ -36,6 +36,8 @@ impl<'b> CBytes<'b> {
 }
 
 /// Checks whether there is any NUL in the bytes
+/// # Errors
+/// Returns [`NulError`]
 #[inline]
 pub fn check_bytes(bytes: &[u8]) -> Result<(), NulError> {
     match memchr(0, bytes) {
@@ -45,7 +47,7 @@ pub fn check_bytes(bytes: &[u8]) -> Result<(), NulError> {
 }
 
 /// The error returned by [`check_bytes`]
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
 #[error("NulError: nul position = {}",.pos)]
 pub struct NulError {
     /// nul position
@@ -56,7 +58,7 @@ impl NulError {
     /// Returns the position of NUL
     #[inline]
     #[must_use]
-    pub const fn nul_position(&self) -> usize {
+    pub const fn nul_position(self) -> usize {
         self.pos
     }
 }

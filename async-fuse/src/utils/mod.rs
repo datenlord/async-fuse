@@ -37,7 +37,7 @@ where
 }
 
 /// # Safety
-/// T muse have no internal mutability
+/// The bytes of T muse not be changed during the lifetime of `&[u8]`
 #[inline]
 pub unsafe fn as_bytes_unchecked<T: Sized>(raw: &T) -> &[u8] {
     let ty_size = mem::size_of::<T>();
