@@ -39,6 +39,7 @@
     clippy::panic_in_result_fn, // allow debug_assert, panic in production code
     clippy::indexing_slicing,
 )]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 pub mod core;
 

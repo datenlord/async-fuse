@@ -14,3 +14,6 @@ pub use self::write::FuseWrite;
 
 mod errno;
 pub use self::errno::Errno;
+
+#[allow(dead_code)]
+mod decode;
