@@ -5,7 +5,7 @@
     // https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html
     anonymous_parameters,
     bare_trait_objects,
-    box_pointers,
+    // box_pointers,
     elided_lifetimes_in_paths,
     missing_copy_implementations,
     missing_debug_implementations,
@@ -42,6 +42,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 
 pub mod core;
+pub mod server;
 
 #[allow(dead_code)]
 mod utils;

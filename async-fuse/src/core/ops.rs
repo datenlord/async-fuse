@@ -21,6 +21,7 @@ pub trait IsReplyOf<T> {}
 #[non_exhaustive]
 pub enum Operation<'b> {
     Init(OpInit<'b>),
+    __TODO,
 }
 
 macro_rules! derive_Decode {
