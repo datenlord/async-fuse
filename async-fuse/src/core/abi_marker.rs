@@ -1,7 +1,7 @@
 //! Internal marker for FUSE ABI types.
 
 #[allow(clippy::wildcard_imports)]
-use crate::kernel::*;
+use super::kernel::*;
 
 /// FUSE ABI types.
 /// It is safe to transmute a `&[u8]` to `&T` where `T: FuseAbiData + Sized`
