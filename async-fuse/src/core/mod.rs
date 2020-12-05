@@ -1,7 +1,12 @@
 //! async-fuse core types
 
-#[allow(dead_code, missing_docs, clippy::missing_docs_in_private_items)]
-mod kernel;
+#[allow(
+    dead_code,
+    missing_docs,
+    clippy::missing_docs_in_private_items,
+    missing_copy_implementations
+)]
+pub mod kernel;
 
 #[allow(dead_code)]
 mod abi_marker;
@@ -18,11 +23,14 @@ pub use self::errno::Errno;
 #[allow(dead_code)]
 mod decode;
 pub use self::decode::{Decode, DecodeError, Decoder};
+
 #[allow(dead_code)]
 mod encode;
 pub use self::encode::Encode;
 
+#[allow(dead_code, missing_docs, clippy::missing_docs_in_private_items)]
 pub mod ops;
+pub use self::ops::Operation;
 
 mod context;
 pub use self::context::FuseContext;

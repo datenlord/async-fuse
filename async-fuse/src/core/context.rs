@@ -7,8 +7,8 @@ use super::kernel;
 use super::ops::{FuseInHeader, IsReplyOf, Operation};
 use super::write::FuseWrite;
 
-// #[allow(clippy::wildcard_imports)]
-// use super::kernel::fuse_opcode::*;
+#[allow(clippy::wildcard_imports)]
+use super::kernel::fuse_opcode::*;
 
 use std::convert::TryFrom;
 use std::fmt::{self, Debug};
@@ -59,7 +59,8 @@ impl<'b> FuseContext<'b> {
 
             #[allow(clippy::single_match_else)]
             let op = match opcode {
-                0 => Operation::__TODO(b"todo"), // TODO
+                FUSE_INIT => Operation::Init(de.decode()?),
+                // TODO: add more operations
                 _ => {
                     tracing::error!(%opcode, "unimplemented operation");
                     return Err(DecodeError::InvalidValue);
