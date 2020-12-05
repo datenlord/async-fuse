@@ -54,3 +54,6 @@ mod utils;
 
 mod write;
 pub use self::write::FuseWrite;
+
+mod errno;
+pub use self::errno::Errno;
