@@ -1,6 +1,6 @@
 //! The context of a FUSE request
 
-use super::decode::{DecodeError, Decoder};
+use super::decode::{Decode, DecodeError, Decoder};
 use super::encode::{self, Encode};
 use super::errno::Errno;
 use super::kernel;
@@ -25,6 +25,18 @@ pub struct FuseContext<'b> {
     writer: Pin<&'b mut (dyn FuseWrite + Send)>,
     /// request header
     header: FuseInHeader<'b>,
+    /// protocol version
+    #[allow(dead_code)]
+    proto: ProtocolVersion,
+}
+
+/// protocol version
+#[derive(Debug, Clone, Copy)]
+pub struct ProtocolVersion {
+    /// major version number
+    pub major: u32,
+    /// minor version number
+    pub minor: u32,
 }
 
 impl Debug for FuseContext<'_> {
@@ -37,58 +49,77 @@ impl Debug for FuseContext<'_> {
     }
 }
 
+/// decode
+fn decode<'b, T: Decode<'b>>(
+    de: &mut Decoder<'b>,
+    proto: ProtocolVersion,
+) -> Result<T, DecodeError> {
+    T::decode(de, proto)
+}
+
+/// parse
+fn parse(
+    buf: &'_ [u8],
+    proto: ProtocolVersion,
+) -> Result<(FuseInHeader<'_>, Operation<'_>), DecodeError> {
+    let mut de = Decoder::new(buf);
+    de.all_consuming(|de| {
+        let header: FuseInHeader<'_> = decode(de, proto)?;
+        let opcode = header.0.opcode;
+
+        assert_eq!(usize::try_from(header.0.len), Ok(buf.len()));
+
+        let op = match opcode {
+            FUSE_FLUSH => Operation::Flush(decode(de, proto)?),
+            FUSE_FORGET => Operation::Forget(decode(de, proto)?),
+            FUSE_FSYNC => Operation::FSync(decode(de, proto)?),
+            FUSE_GETATTR => Operation::GetAttr(decode(de, proto)?),
+            FUSE_GETXATTR => Operation::GetXAttr(decode(de, proto)?),
+            FUSE_INIT => Operation::Init(decode(de, proto)?),
+            FUSE_INTERRUPT => Operation::Interrupt(decode(de, proto)?),
+            FUSE_LOOKUP => Operation::Lookup(decode(de, proto)?),
+            FUSE_MKDIR => Operation::MkDir(decode(de, proto)?),
+            FUSE_MKNOD => Operation::MkNod(decode(de, proto)?),
+            FUSE_OPEN => Operation::Open(decode(de, proto)?),
+            FUSE_OPENDIR => Operation::OpenDir(decode(de, proto)?),
+            FUSE_READ => Operation::Read(decode(de, proto)?),
+            FUSE_READDIR => Operation::ReadDir(decode(de, proto)?),
+            FUSE_READLINK => Operation::ReadLink(decode(de, proto)?),
+            FUSE_RELEASE => Operation::Release(decode(de, proto)?),
+            FUSE_RELEASEDIR => Operation::ReleaseDir(decode(de, proto)?),
+            FUSE_RMDIR => Operation::RmDir(decode(de, proto)?),
+            FUSE_SETATTR => Operation::SetAttr(decode(de, proto)?),
+            FUSE_SYMLINK => Operation::SymLink(decode(de, proto)?),
+            FUSE_STATFS => Operation::StatFs(decode(de, proto)?),
+            FUSE_UNLINK => Operation::Unlink(decode(de, proto)?),
+            FUSE_WRITE => Operation::Write(decode(de, proto)?),
+            // TODO: add more operations
+            _ => {
+                tracing::error!(%opcode, "unimplemented operation");
+                return Err(DecodeError::InvalidValue);
+            }
+        };
+        Ok((header, op))
+    })
+}
+
 impl<'b> FuseContext<'b> {
     /// Creates a [`FuseContext`]
-    #[must_use]
-    #[inline]
-    pub fn new(writer: Pin<&'b mut (dyn FuseWrite + Send)>, header: FuseInHeader<'b>) -> Self {
-        Self { writer, header }
-    }
-
-    /// Parses a buffer
     /// # Errors
-    /// Returns [`DecodeError`]
+    /// Returns `DecodeError`
     #[inline]
-    pub fn parse(buf: &'b [u8]) -> Result<(FuseInHeader<'b>, Operation<'b>), DecodeError> {
-        let mut de = Decoder::new(buf);
-        de.all_consuming(|de| {
-            let header = de.decode::<FuseInHeader<'b>>()?;
-            let opcode = header.0.opcode;
-
-            assert_eq!(usize::try_from(header.0.len), Ok(buf.len()));
-
-            let op = match opcode {
-                FUSE_FLUSH => Operation::Flush(de.decode()?),
-                FUSE_FORGET => Operation::Forget(de.decode()?),
-                FUSE_FSYNC => Operation::FSync(de.decode()?),
-                FUSE_GETATTR => Operation::GetAttr(de.decode()?),
-                FUSE_GETXATTR => Operation::GetXAttr(de.decode()?),
-                FUSE_INIT => Operation::Init(de.decode()?),
-                FUSE_INTERRUPT => Operation::Interrupt(de.decode()?),
-                FUSE_LOOKUP => Operation::Lookup(de.decode()?),
-                FUSE_MKDIR => Operation::MkDir(de.decode()?),
-                FUSE_MKNOD => Operation::MkNod(de.decode()?),
-                FUSE_OPEN => Operation::Open(de.decode()?),
-                FUSE_OPENDIR => Operation::OpenDir(de.decode()?),
-                FUSE_READ => Operation::Read(de.decode()?),
-                FUSE_READDIR => Operation::ReadDir(de.decode()?),
-                FUSE_READLINK => Operation::ReadLink(de.decode()?),
-                FUSE_RELEASE => Operation::Release(de.decode()?),
-                FUSE_RELEASEDIR => Operation::ReleaseDir(de.decode()?),
-                FUSE_RMDIR => Operation::RmDir(de.decode()?),
-                FUSE_SETATTR => Operation::SetAttr(de.decode()?),
-                FUSE_SYMLINK => Operation::SymLink(de.decode()?),
-                FUSE_STATFS => Operation::StatFs(de.decode()?),
-                FUSE_UNLINK => Operation::Unlink(de.decode()?),
-                FUSE_WRITE => Operation::Write(de.decode()?),
-                // TODO: add more operations
-                _ => {
-                    tracing::error!(%opcode, "unimplemented operation");
-                    return Err(DecodeError::InvalidValue);
-                }
-            };
-            Ok((header, op))
-        })
+    pub fn new(
+        buf: &'b [u8],
+        writer: Pin<&'b mut (dyn FuseWrite + Send)>,
+        proto: ProtocolVersion,
+    ) -> Result<(Self, Operation<'b>), DecodeError> {
+        let (header, op) = parse(buf, proto)?;
+        let cx = Self {
+            writer,
+            header,
+            proto,
+        };
+        Ok((cx, op))
     }
 
     /// Gets the request header
@@ -103,10 +134,12 @@ impl<'b> FuseContext<'b> {
     /// Returns [`io::Error`] when failed to write bytes to the connection
     #[allow(clippy::future_not_send)]
     #[inline]
-    pub async fn reply<T, R>(mut self, _: &T, reply: R) -> io::Result<()>
+    pub async fn reply<T, R>(mut self, _: &T, mut reply: R) -> io::Result<()>
     where
         R: IsReplyOf<T> + Encode,
     {
+        reply.set_version(self.proto);
+
         let header;
         let header_len = mem::size_of::<kernel::fuse_out_header>();
 

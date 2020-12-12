@@ -10,7 +10,7 @@ use self::mount::mount;
 
 use crate::core::kernel;
 use crate::core::ops;
-use crate::core::{FileSystem, FuseContext, Operation};
+use crate::core::{FileSystem, FuseContext, Operation, ProtocolVersion};
 
 use std::io::{self, Read};
 use std::path::PathBuf;
@@ -90,23 +90,32 @@ where
         })
         .await?;
 
-        let (fuse_in_header, op) = match FuseContext::parse(&buf[..nread]) {
-            Ok(r) => r,
-            Err(e) => {
-                debug!(buf = ?buf.as_ref());
-                panic!("failed to parse fuse request: {}", e);
-            }
-        };
-
         let cx_writer = writer.clone();
         pin_mut!(cx_writer);
 
-        let cx = FuseContext::new(cx_writer, fuse_in_header);
+        let (cx, op) = FuseContext::new(
+            &buf[..nread],
+            cx_writer,
+            ProtocolVersion {
+                major: kernel::FUSE_KERNEL_VERSION,
+                minor: kernel::FUSE_KERNEL_MINOR_VERSION,
+            },
+        )
+        .unwrap_or_else(|err| {
+            debug!(buf = ?buf.as_ref());
+            panic!("failed to parse fuse request: {}", err);
+        });
 
         debug!(opcode = cx.header().opcode(), "got first request");
 
+        let proto;
         if let Operation::Init(op) = op {
             // FIXME: how to set the init config?
+
+            proto = ProtocolVersion {
+                major: op.major(),
+                minor: op.minor(),
+            };
 
             let mut reply = ops::ReplyInit::default();
             let _ = reply
@@ -136,6 +145,7 @@ where
             // mount_point,
             buffer_pool: Arc::new(buffer_pool),
             fs: Arc::new(self.fs),
+            proto,
         };
         Ok(server)
     }
@@ -153,6 +163,8 @@ pub struct Server<F> {
     /// Arc file system
     fs: Arc<F>,
     // mount_point: PathBuf,
+    /// kernel prototol version
+    proto: ProtocolVersion,
 }
 
 impl<F> Server<F>
@@ -181,11 +193,13 @@ where
 
                 let cx_writer = self.writer.clone();
                 let fs = Arc::clone(&self.fs);
+                let proto = self.proto;
 
                 debug!("spawn task");
 
                 let _ = task::spawn(async move {
-                    let (header, op) = match FuseContext::parse(buf.as_ref()) {
+                    pin_mut!(cx_writer);
+                    let (cx, op) = match FuseContext::new(buf.as_ref(), cx_writer, proto) {
                         Ok(r) => r,
                         Err(e) => {
                             debug!(buf = ?buf.as_ref());
@@ -193,14 +207,10 @@ where
                         }
                     };
                     debug!(
-                        opcode = header.opcode(),
-                        unique = header.unique(),
+                        opcode = cx.header().opcode(),
+                        unique = cx.header().unique(),
                         "got request"
                     );
-
-                    pin_mut!(cx_writer);
-
-                    let cx = FuseContext::new(cx_writer, header);
 
                     let ret = fs.dispatch(cx, op).await;
                     if let Err(err) = ret {

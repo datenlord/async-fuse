@@ -1,5 +1,6 @@
 //! FUSE operations
 
+use super::context::ProtocolVersion;
 use super::decode::{Decode, DecodeError, Decoder};
 use super::encode::{self, Encode};
 
@@ -59,6 +60,7 @@ macro_rules! derive_Decode {
             #[inline]
             fn decode(
                 de: &mut Decoder<'b>,
+                _proto: ProtocolVersion,
             ) -> Result<Self, DecodeError> {
                 Ok(Self(de.fetch()?))
             }
@@ -70,6 +72,7 @@ macro_rules! derive_Decode {
             #[inline]
             fn decode(
                 de: &mut Decoder<'b>,
+                _proto: ProtocolVersion,
             ) -> Result<Self, DecodeError> {
                 $(let $f = de.fetch_c_bytes()?;)+
                 Ok(Self{$($f),+})
@@ -82,6 +85,7 @@ macro_rules! derive_Decode {
             #[inline]
             fn decode(
                 de: &mut Decoder<'b>,
+                _proto: ProtocolVersion,
             ) -> Result<Self, DecodeError> {
                 let $h = de.fetch()?;
                 let $b = de.fetch_c_bytes()?;
@@ -95,6 +99,7 @@ macro_rules! derive_Decode {
             #[inline]
             fn decode(
                 de: &mut Decoder<'b>,
+                _proto: ProtocolVersion,
             ) -> Result<Self, DecodeError> {
                 let $h = de.fetch()?;
                 let $b = de.fetch_all_bytes()?;
@@ -108,6 +113,7 @@ macro_rules! derive_Decode {
             #[inline]
             fn decode(
                 _: &mut Decoder<'b>,
+                _: ProtocolVersion,
             ) -> Result<Self, DecodeError> {
                 Ok(Self(&()))
             }

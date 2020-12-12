@@ -1,6 +1,7 @@
 //! Decode FUSE ABI types from bytes
 
 use super::abi_marker::FuseAbiData;
+use super::context::ProtocolVersion;
 use crate::utils::c_bytes::CBytes;
 
 use std::mem;
@@ -46,7 +47,7 @@ pub trait Decode<'b>: Sized {
     /// Decode Self from bytes
     /// # Errors
     /// Returns [`DecodeError`]
-    fn decode(de: &'_ mut Decoder<'b>) -> Result<Self, DecodeError>;
+    fn decode(de: &'_ mut Decoder<'b>, proto: ProtocolVersion) -> Result<Self, DecodeError>;
 }
 
 impl<'b> Decoder<'b> {
@@ -62,14 +63,6 @@ impl<'b> Decoder<'b> {
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.bytes.is_empty()
-    }
-
-    /// Decode T from bytes
-    /// # Errors
-    /// Returns [`DecodeError`]
-    #[inline]
-    pub fn decode<T: Decode<'b>>(&mut self) -> Result<T, DecodeError> {
-        <T as Decode>::decode(self)
     }
 
     /// pop some bytes without length checking

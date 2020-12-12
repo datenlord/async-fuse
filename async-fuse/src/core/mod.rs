@@ -33,7 +33,7 @@ pub mod ops;
 pub use self::ops::Operation;
 
 mod context;
-pub use self::context::FuseContext;
+pub use self::context::{FuseContext, ProtocolVersion};
 
 mod fs;
 pub use self::fs::FileSystem;

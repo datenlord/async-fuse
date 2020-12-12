@@ -1,6 +1,7 @@
 //! Types which can be converted to some bytes without copy
 
 use super::abi_marker::FuseAbiData;
+use super::context::ProtocolVersion;
 use crate::utils::as_bytes_unchecked;
 
 use std::io::IoSlice;
@@ -11,6 +12,10 @@ pub trait Encode {
     fn collect_bytes<'c, C>(&'c self, container: &mut C)
     where
         C: Extend<IoSlice<'c>>;
+
+    /// Sets fields with kernel protocol version
+    #[inline]
+    fn set_version(&mut self, _proto: ProtocolVersion) {}
 }
 
 /// convert a FUSE ABI reference to bytes

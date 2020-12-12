@@ -2,8 +2,8 @@ use async_fuse::server::Server;
 use memfs::hello_ll::HelloLL;
 
 use std::env;
-use std::path::PathBuf;
 use std::io;
+use std::path::PathBuf;
 
 use structopt::StructOpt;
 use tracing::debug;
