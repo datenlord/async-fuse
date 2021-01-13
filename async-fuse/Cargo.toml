@@ -1,0 +1,51 @@
+[package]
+name = "async-fuse"
+version = "0.1.0"
+authors = ["Nugine <nugine@foxmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+aligned-utils = "1.0.0"
+async-std = "1.7.0"
+async-trait = "0.1.41"
+better-as = "0.2.0"
+bitflags = "1.2.1"
+blocking = "1.0.2"
+crossbeam-queue = "0.3.0"
+crossbeam-utils = "0.8.0"
+futures-util = "0.3.8"
+libc = "0.2.80"
+memchr = "2.3.4"
+owning_ref = "0.4.1"
+smallvec = "1.4.2"
+thiserror = "1.0.21"
+
+[dependencies.tracing]
+git = "https://github.com/tokio-rs/tracing"
+rev = "8070a85"
+version = "0.2.0"
+## FIXME: unpublished version
+
+[dependencies.tracing-error]
+git = "https://github.com/tokio-rs/tracing"
+rev = "8070a85"
+version = "0.2.0"
+## FIXME: unpublished version
+
+[dependencies.tracing-futures]
+git = "https://github.com/tokio-rs/tracing"
+rev = "8070a85"
+version = "0.3.0"
+## FIXME: unpublished version
+
+[dev-dependencies]
+anyhow = "1.0.34"
+structopt = "0.3.20"
+
+[dev-dependencies.tracing-subscriber]
+git = "https://github.com/tokio-rs/tracing"
+rev = "8070a85"
+version = "0.3.0"
+## FIXME: unpublished version
