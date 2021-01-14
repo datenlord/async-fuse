@@ -9,7 +9,7 @@
     elided_lifetimes_in_paths,
     missing_copy_implementations,
     missing_debug_implementations,
-    missing_docs,
+    // missing_docs,
     single_use_lifetimes,
     trivial_casts,
     trivial_numeric_casts,
@@ -36,7 +36,16 @@
     clippy::panic, // allow debug_assert, panic in production code
     clippy::panic_in_result_fn, // allow debug_assert, panic in production code
     clippy::indexing_slicing,
+    missing_docs,
+    clippy::missing_docs_in_private_items,
+    clippy::redundant_pub_crate,
 )]
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 
-pub mod core;
+mod abi;
+mod conn;
+mod context;
+mod fd;
+mod kernel;
+mod payload;
+mod proactor;

@@ -7,7 +7,7 @@
 //! latest: <https://github.com/libfuse/libfuse/blob/master/include/fuse_kernel.h>
 //!
 
-#![allow(clippy::doc_markdown)]
+#![allow(clippy::doc_markdown, clippy::missing_docs_in_private_items)]
 
 use std::os::raw::c_char;
 

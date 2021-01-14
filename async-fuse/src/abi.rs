@@ -29,6 +29,20 @@ pub fn as_abi_bytes<T: FuseAbiData + Sized>(raw: &T) -> &[u8] {
     unsafe { as_bytes_unchecked(raw) }
 }
 
+pub struct RawBytes<T: FuseAbiData + Sized>(T);
+
+impl<T: FuseAbiData + Sized> RawBytes<T> {
+    pub fn wrap(raw: T) -> Self {
+        Self(raw)
+    }
+}
+
+impl<T: FuseAbiData + Sized> AsRef<[u8]> for RawBytes<T> {
+    fn as_ref(&self) -> &[u8] {
+        as_abi_bytes(&self.0)
+    }
+}
+
 macro_rules! mark_abi_type {
     ($ty: ty) => {
         unsafe impl FuseAbiData for $ty {}
