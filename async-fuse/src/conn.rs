@@ -4,9 +4,11 @@ use crate::fd::{FuseDesc, OwnedFd};
 use crate::proactor::global_proactor;
 
 use std::io::{self, IoSlice};
+use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
 
 use blocking::unblock;
+use nix::fcntl::SpliceFFlags;
 
 /// Connects to `/dev/fuse`
 pub async fn connect() -> io::Result<(ConnReader, ConnWriter)> {
@@ -22,7 +24,7 @@ pub async fn connect() -> io::Result<(ConnReader, ConnWriter)> {
 }
 
 /// The reader of a FUSE connection
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ConnReader {
     /// Arc fd
     fd: Arc<FuseDesc>,
@@ -50,6 +52,18 @@ impl ConnReader {
         let proactor = global_proactor();
         let (_, buf, ret) = proactor.read(fd, buf).await;
         (buf, ret)
+    }
+
+    pub async fn splice_to<H>(&mut self, pipe_tx: H, len: usize) -> (H, io::Result<usize>)
+    where
+        H: AsRawFd + Send + 'static,
+    {
+        let fd = OwnedFd(Arc::clone(&self.fd));
+        let proactor = global_proactor();
+        let (_, pipe_tx, ret) = proactor
+            .splice(fd, None, pipe_tx, None, len, SpliceFFlags::empty())
+            .await;
+        (pipe_tx, ret)
     }
 }
 

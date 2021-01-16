@@ -2,6 +2,8 @@
 
 use std::{mem, slice};
 
+use better_as::pointer;
+
 /// FUSE ABI types.
 ///
 /// It is safe to transmute a `&[u8]` to `&T` where `T: FuseAbiData + Sized`.
@@ -28,6 +30,78 @@ pub unsafe fn as_bytes_unchecked<T: Sized>(raw: &T) -> &[u8] {
 pub fn as_abi_bytes<T: FuseAbiData + Sized>(raw: &T) -> &[u8] {
     unsafe { as_bytes_unchecked(raw) }
 }
+
+/// The error returned by [`fetch`]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum AbiError {
+    /// Expected more data
+    #[error("NotEnough")]
+    NotEnough,
+
+    /// Data is more than expected
+    #[error("TooMuchData")]
+    TooMuchData,
+
+    /// Pointer's alignment mismatched with the target type
+    #[error("AlignMismatch")]
+    AlignMismatch,
+
+    /// Number overflow during decoding
+    #[error("NumOverflow")]
+    NumOverflow,
+
+    /// The value of the target type is invalid
+    #[error("InvalidValue")]
+    InvalidValue,
+}
+
+pub fn fetch_ref<'a, T: FuseAbiData + Sized>(bytes: &mut &'a [u8]) -> Result<&'a T, AbiError> {
+    let ty_size: usize = mem::size_of::<T>();
+    let ty_align: usize = mem::align_of::<T>();
+    debug_assert!(ty_size > 0 && ty_size.wrapping_rem(ty_align) == 0);
+
+    if bytes.len() < ty_size {
+        return Err(AbiError::NotEnough);
+    }
+
+    let addr = pointer::to_address(bytes.as_ptr());
+    if addr.wrapping_rem(ty_align) != 0 {
+        return Err(AbiError::AlignMismatch);
+    }
+
+    unsafe { Ok(&*(bytes.as_ptr().cast())) }
+}
+
+pub fn with_mut<T: FuseAbiData + Sized>(
+    buf: &mut [u8],
+    f: impl FnOnce(&mut T),
+) -> Result<usize, AbiError> {
+    let ty_size: usize = mem::size_of::<T>();
+    let ty_align: usize = mem::align_of::<T>();
+    debug_assert!(ty_size > 0 && ty_size.wrapping_rem(ty_align) == 0);
+
+    if buf.len() < ty_size {
+        return Err(AbiError::NotEnough);
+    }
+
+    let addr = pointer::to_address(buf.as_ptr());
+    if addr.wrapping_rem(ty_align) != 0 {
+        return Err(AbiError::AlignMismatch);
+    }
+
+    let ref_mut = unsafe { &mut *(buf.as_mut_ptr().cast()) };
+    f(ref_mut);
+
+    Ok(ty_size)
+}
+
+#[repr(C)]
+pub struct Tuple2<T1, T2> {
+    pub first: T1,
+    pub second: T2,
+}
+
+unsafe impl<T1: FuseAbiData, T2: FuseAbiData> FuseAbiData for Tuple2<T1, T2> {}
 
 pub struct RawBytes<T: FuseAbiData + Sized>(T);
 

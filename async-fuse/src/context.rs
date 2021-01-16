@@ -1,7 +1,5 @@
 //!
 
-#![allow(clippy::missing_docs_in_private_items)]
-
 use crate::abi::RawBytes;
 use crate::conn::ConnWriter;
 use crate::kernel;
@@ -13,20 +11,30 @@ use nix::errno::Errno;
 
 #[derive(Debug)]
 pub struct FuseContext {
-    header: FuseInHeader,
-    payload: Payload,
-    writer: ConnWriter,
+    pub(crate) header: FuseInHeader,
+    pub(crate) payload: Payload,
+    pub(crate) writer: ConnWriter,
+    pub(crate) proto: ProtocolVersion,
 }
 
 #[derive(Debug)]
-struct FuseInHeader {
-    len: u32,
-    opcode: u32,
-    unique: u64,
-    nodeid: u64,
-    uid: u32,
-    gid: u32,
-    pid: u32,
+pub struct FuseInHeader {
+    pub len: u32,
+    pub opcode: u32,
+    pub unique: u64,
+    pub nodeid: u64,
+    pub uid: u32,
+    pub gid: u32,
+    pub pid: u32,
+}
+
+/// protocol version
+#[derive(Debug, Clone, Copy)]
+pub struct ProtocolVersion {
+    /// major version number
+    pub major: u32,
+    /// minor version number
+    pub minor: u32,
 }
 
 impl FuseContext {

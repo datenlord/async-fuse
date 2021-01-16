@@ -1,13 +1,11 @@
 //! The file desciptor of `/dev/fuse`
 
-use std::convert::TryFrom;
-use std::ops::Deref;
-use std::os::raw::{c_char, c_int, c_longlong, c_void};
-use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
-use std::{io, mem, ptr};
+use crate::syscall;
 
-use better_as::number::WrappingCast;
-use nix::fcntl::SpliceFFlags;
+use std::ops::Deref;
+use std::os::raw::{c_char, c_int};
+use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
+use std::{io, mem};
 
 /// The file desciptor of `/dev/fuse`
 #[derive(Debug)]
@@ -74,82 +72,6 @@ pub fn create_pipe() -> io::Result<(PipeReader, PipeWriter)> {
     Ok((PipeReader(fds[0]), PipeWriter(fds[1])))
 }
 
-/// Casts [`usize`] to [`c_int`]
-#[track_caller]
-fn usize_to_c_int(x: usize) -> c_int {
-    match c_int::try_from(x) {
-        Ok(r) => r,
-        Err(e) => panic!(
-            "failed to convert usize to c_int: value = {}, error = {}",
-            x, e
-        ),
-    }
-}
-
-/// Calls `read(2)`
-pub(crate) fn read(fd: RawFd, buf: &mut [u8]) -> io::Result<usize> {
-    unsafe {
-        let buf_ptr: *mut c_void = buf.as_mut_ptr().cast();
-        let ret: isize = libc::read(fd, buf_ptr, buf.len());
-        if ret < 0 {
-            return Err(io::Error::last_os_error());
-        }
-
-        // a non-negative `ssize_t` value can not overflow `usize`
-        Ok(ret.wrapping_cast())
-    }
-}
-
-/// Calls `readv(2)`
-pub(crate) fn read_vectored(fd: RawFd, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
-    unsafe {
-        // IoSliceMut is guaranteed to be ABI compatible with `iovec`
-        let iov: *const libc::iovec = bufs.as_ptr().cast();
-
-        let iovcnt: c_int = usize_to_c_int(bufs.len());
-
-        let ret: isize = libc::readv(fd, iov, iovcnt);
-        if ret < 0 {
-            return Err(io::Error::last_os_error());
-        }
-
-        // a non-negative `ssize_t` value can not overflow `usize`
-        Ok(ret.wrapping_cast())
-    }
-}
-
-/// Calls `write(2)`
-pub(crate) fn write(fd: RawFd, buf: &[u8]) -> io::Result<usize> {
-    unsafe {
-        let buf_ptr: *const c_void = buf.as_ptr().cast();
-        let ret: isize = libc::write(fd, buf_ptr, buf.len());
-        if ret < 0 {
-            return Err(io::Error::last_os_error());
-        }
-
-        // a non-negative `ssize_t` value can not overflow `usize`
-        Ok(ret.wrapping_cast())
-    }
-}
-
-/// Calls `writev(2)`
-pub(crate) fn write_vectored(fd: RawFd, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
-    unsafe {
-        // IoSlice is guaranteed to be ABI compatible with `iovec`
-        let iov: *const libc::iovec = bufs.as_ptr().cast();
-
-        let iovcnt: c_int = usize_to_c_int(bufs.len());
-
-        let ret: isize = libc::writev(fd, iov, iovcnt);
-        if ret < 0 {
-            return Err(io::Error::last_os_error());
-        }
-
-        // a non-negative `ssize_t` value can not overflow `usize`
-        Ok(ret.wrapping_cast())
-    }
-}
-
 macro_rules! impl_fd_wrapper {
     ($ty: ty) => {
         impl Drop for $ty {
@@ -183,12 +105,12 @@ macro_rules! impl_Read {
         impl io::Read for $ty {
             #[inline]
             fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-                read(self.0, buf)
+                syscall::read(self.0, buf)
             }
 
             #[inline]
             fn read_vectored(&mut self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
-                read_vectored(self.0, bufs)
+                syscall::read_vectored(self.0, bufs)
             }
         }
     };
@@ -199,7 +121,7 @@ macro_rules! impl_Write {
         impl io::Write for $ty {
             #[inline]
             fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-                write(self.0, buf)
+                syscall::write(self.0, buf)
             }
 
             #[inline]
@@ -209,7 +131,7 @@ macro_rules! impl_Write {
 
             #[inline]
             fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
-                write_vectored(self.0, bufs)
+                syscall::write_vectored(self.0, bufs)
             }
         }
     };
@@ -236,51 +158,5 @@ where
 {
     fn as_raw_fd(&self) -> RawFd {
         self.0.deref().as_raw_fd()
-    }
-}
-
-#[track_caller]
-fn usize_to_c_longlong(x: usize) -> c_longlong {
-    match c_longlong::try_from(x) {
-        Ok(r) => r,
-        Err(e) => panic!(
-            "failed to convert usize to c_longlong: value = {}, error = {}",
-            x, e
-        ),
-    }
-}
-
-pub fn splice(
-    fd_in: RawFd,
-    off_in: Option<usize>,
-    fd_out: RawFd,
-    off_out: Option<usize>,
-    len: usize,
-    flags: SpliceFFlags,
-) -> io::Result<usize> {
-    let mut raw_off_in: libc::c_longlong;
-    let mut raw_off_out: libc::c_longlong;
-    let p_off_in = match off_in {
-        None => ptr::null_mut(),
-        Some(n) => {
-            raw_off_in = usize_to_c_longlong(n);
-            &mut raw_off_in
-        }
-    };
-    let p_off_out = match off_out {
-        None => ptr::null_mut(),
-        Some(n) => {
-            raw_off_out = usize_to_c_longlong(n);
-            &mut raw_off_out
-        }
-    };
-
-    unsafe {
-        let ret = libc::splice(fd_in, p_off_in, fd_out, p_off_out, len, flags.bits());
-        if ret < 0 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(ret.wrapping_cast())
-        }
     }
 }

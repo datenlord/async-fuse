@@ -2,6 +2,7 @@ use std::io;
 use std::sync::Arc;
 
 use crate::fd::{create_pipe, PipeReader, PipeWriter};
+use crate::proactor::global_proactor;
 
 use aligned_utils::bytes::AlignedBytes;
 use crossbeam_queue::ArrayQueue;
@@ -27,9 +28,11 @@ impl Resource {
 
 #[derive(Debug)]
 pub struct Payload {
-    buf: Option<AlignedBytes>,
-    pipe_rx: Option<PipeReader>,
-    pipe_tx: Option<PipeWriter>,
+    pub(crate) buf: Option<AlignedBytes>,
+    pub(crate) pipe_rx: Option<PipeReader>,
+    pub(crate) pipe_tx: Option<PipeWriter>,
+    pub(crate) buf_data_len: usize,
+    pub(crate) pipe_data_len: usize,
     queue: Arc<ArrayQueue<Resource>>,
 }
 
@@ -50,6 +53,47 @@ impl Drop for Payload {
     }
 }
 
+impl Payload {
+    #[allow(clippy::unwrap_used, clippy::clippy::integer_arithmetic)]
+    pub(crate) async fn load_data(&mut self, len: usize) -> io::Result<&[u8]> {
+        struct OffsetBuf<B> {
+            buf: B,
+            offset: usize,
+            len: usize,
+        }
+
+        impl<B: AsMut<[u8]>> AsMut<[u8]> for OffsetBuf<B> {
+            fn as_mut(&mut self) -> &mut [u8] {
+                let buf = self.buf.as_mut();
+                let upper = self.offset.saturating_add(self.len).min(buf.len());
+                &mut self.buf.as_mut()[self.offset..upper]
+            }
+        }
+
+        let proactor = global_proactor();
+        let pipe_rx = self.pipe_rx.take().unwrap();
+        let buf = self.buf.take().unwrap();
+
+        let offset_buf = OffsetBuf {
+            buf,
+            offset: self.buf_data_len,
+            len,
+        };
+
+        let (pipe_rx, offset_buf, ret) = proactor.read(pipe_rx, offset_buf).await;
+        self.pipe_rx = Some(pipe_rx);
+        self.buf = Some(offset_buf.buf);
+        let nread = ret?;
+        assert_eq!(nread, len);
+
+        self.buf_data_len += nread;
+        self.pipe_data_len -= nread;
+
+        Ok(&self.buf.as_ref().unwrap()[self.buf_data_len - nread..self.buf_data_len])
+    }
+}
+
+#[derive(Debug)]
 pub struct PayloadPool {
     queue: Arc<ArrayQueue<Resource>>,
     buf_len: usize,
@@ -80,6 +124,8 @@ impl PayloadPool {
             buf: Some(res.buf),
             pipe_rx: Some(res.pipe_rx),
             pipe_tx: Some(res.pipe_tx),
+            buf_data_len: 0,
+            pipe_data_len: 0,
         };
         Ok(payload)
     }

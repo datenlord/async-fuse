@@ -4,6 +4,8 @@ pub use self::unblock_proactor::{global_proactor, Proactor};
 pub use self::uring_proactor::{global_proactor, Proactor};
 
 mod unblock_proactor {
+    use crate::syscall;
+
     use std::io::{self, IoSlice};
     use std::os::unix::io::AsRawFd;
 
@@ -28,7 +30,7 @@ mod unblock_proactor {
         {
             unblock(move || {
                 let fd = handle.as_raw_fd();
-                let ret = crate::fd::read(fd, buf.as_mut());
+                let ret = syscall::read(fd, buf.as_mut());
                 (handle, buf, ret)
             })
             .await
@@ -41,7 +43,7 @@ mod unblock_proactor {
         {
             unblock(move || {
                 let fd = handle.as_raw_fd();
-                let ret = crate::fd::write(fd, buf.as_ref());
+                let ret = syscall::write(fd, buf.as_ref());
                 (handle, buf, ret)
             })
             .await
@@ -55,13 +57,14 @@ mod unblock_proactor {
         {
             unblock(move || {
                 let fd = handle.as_raw_fd();
-                let ret = crate::fd::write_vectored(fd, bufs.as_ref());
+                let ret = syscall::write_vectored(fd, bufs.as_ref());
                 (handle, bufs, ret)
             })
             .await
         }
 
         pub async fn splice<H1, H2>(
+            &self,
             handle_in: H1,
             off_in: Option<usize>,
             handle_out: H2,
@@ -76,7 +79,7 @@ mod unblock_proactor {
             unblock(move || {
                 let fd_in = handle_in.as_raw_fd();
                 let fd_out = handle_out.as_raw_fd();
-                let ret = crate::fd::splice(fd_in, off_in, fd_out, off_out, len, flags);
+                let ret = syscall::splice(fd_in, off_in, fd_out, off_out, len, flags);
                 (handle_in, handle_out, ret)
             })
             .await
